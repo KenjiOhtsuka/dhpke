@@ -1,0 +1,42 @@
+[
+	{
+		"name": "A.3.1 Base",
+		"mode": "base",
+		"kem_id": 16,
+		"kdf_id": 1,
+		"aead_id": 1,
+		"key": "868c066ef58aae6dc589b6cfdd18f97e",
+		"base_nonce": "4e0bc5018beba4bf004cca59",
+		"ciphertext_seq0": "5ad590bb8baa577f8619db35a36311226a896e7342a6d836d8b7bcd2f20b6c7f9076ac232e3ab2523f39513434"
+	},
+	{
+		"name": "A.3.2 PSK",
+		"mode": "psk",
+		"kem_id": 16,
+		"kdf_id": 1,
+		"aead_id": 1,
+		"key": "55d9eb9d26911d4c514a990fa8d57048",
+		"base_nonce": "b595dc6b2d7e2ed23af529b1",
+		"ciphertext_seq0": "90c4deb5b75318530194e4bb62f890b019b1397bbf9d0d6eb918890e1fb2be1ac2603193b60a49c2126b75d0eb"
+	},
+	{
+		"name": "A.3.3 Auth",
+		"mode": "auth",
+		"kem_id": 16,
+		"kdf_id": 1,
+		"aead_id": 1,
+		"key": "19aa8472b3fdc530392b0e54ca17c0f5",
+		"base_nonce": "b390052d26b67a5b8a8fcaa4",
+		"ciphertext_seq0": "82ffc8c44760db691a07c5627e5fc2c08e7a86979ee79b494a17cc3405446ac2bdb8f265db4a099ed3289ffe19"
+	},
+	{
+		"name": "A.3.4 AuthPSK",
+		"mode": "auth_psk",
+		"kem_id": 16,
+		"kdf_id": 1,
+		"aead_id": 1,
+		"key": "4d567121d67fae1227d90e11585988fb",
+		"base_nonce": "67c9d05330ca21e5116ecda6",
+		"ciphertext_seq0": "b9f36d58d9eb101629a3e5a7b63d2ee4af42b3644209ab37e0a272d44365407db8e655c72e4fa46f4ff81b9246"
+	}
+]

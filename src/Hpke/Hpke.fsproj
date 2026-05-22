@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Core\Types.fs" />
+    <Compile Include="Core\Crypto.fs" />
+    <Compile Include="Core\Errors.fs" />
+    <Compile Include="Core\Requests.fs" />
+    <Compile Include="Core\Base.fs" />
+    <Compile Include="Core\Psk.fs" />
+    <Compile Include="Core\Auth.fs" />
+    <Compile Include="Core\AuthPsk.fs" />
+    <Compile Include="Library.fs" />
+  </ItemGroup>
+
+</Project>

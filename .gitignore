@@ -1,0 +1,48 @@
+# Build outputs
+bin/
+obj/
+
+# Visual Studio files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+
+# dotnet local tools
+.tool/
+
+# Tests
+TestResults/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+# Coverage
+coverage/
+*.coverage
+
+# Sample artifacts
+samples/**/bin/
+samples/**/obj/
+
+# Lock files
+project.lock.json
+
+# dotnet ephemeral
+*.dotnet/

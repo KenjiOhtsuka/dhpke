@@ -1,0 +1,116 @@
+namespace Hpke.Core
+
+type HpkeMode =
+    | Base
+    | Psk
+    | Auth
+    | AuthPsk
+
+type KemAlgorithm =
+    | DhKemP256HkdfSha256
+    | DhKemP384HkdfSha384
+    | DhKemP521HkdfSha512
+    | CustomKem of string
+
+type KdfAlgorithm =
+    | HkdfSha256
+    | HkdfSha384
+    | HkdfSha512
+    | CustomKdf of string
+
+type AeadAlgorithm =
+    | Aes128Gcm
+    | Aes256Gcm
+    | ChaCha20Poly1305
+    | CustomAead of string
+
+type HpkeSuite = {
+    Kem: KemAlgorithm
+    Kdf: KdfAlgorithm
+    Aead: AeadAlgorithm
+}
+
+type BaseSealRequest = {
+    Suite: HpkeSuite
+    RecipientPublicKey: byte[]
+    Info: byte[]
+    Aad: byte[]
+    Plaintext: byte[]
+}
+
+type BaseSealResult = {
+    EncappedKey: byte[]
+    Ciphertext: byte[]
+}
+
+type BaseOpenRequest = {
+    Suite: HpkeSuite
+    RecipientPrivateKey: byte[]
+    EncappedKey: byte[]
+    Info: byte[]
+    Aad: byte[]
+    Ciphertext: byte[]
+}
+
+type PskSealRequest = {
+    Suite: HpkeSuite
+    RecipientPublicKey: byte[]
+    Psk: byte[]
+    PskId: byte[]
+    Info: byte[]
+    Aad: byte[]
+    Plaintext: byte[]
+}
+
+type PskOpenRequest = {
+    Suite: HpkeSuite
+    RecipientPrivateKey: byte[]
+    EncappedKey: byte[]
+    Psk: byte[]
+    PskId: byte[]
+    Info: byte[]
+    Aad: byte[]
+    Ciphertext: byte[]
+}
+
+type AuthSealRequest = {
+    Suite: HpkeSuite
+    RecipientPublicKey: byte[]
+    SenderPrivateKey: byte[]
+    Info: byte[]
+    Aad: byte[]
+    Plaintext: byte[]
+}
+
+type AuthOpenRequest = {
+    Suite: HpkeSuite
+    RecipientPrivateKey: byte[]
+    SenderPublicKey: byte[]
+    EncappedKey: byte[]
+    Info: byte[]
+    Aad: byte[]
+    Ciphertext: byte[]
+}
+
+type AuthPskSealRequest = {
+    Suite: HpkeSuite
+    RecipientPublicKey: byte[]
+    SenderPrivateKey: byte[]
+    Psk: byte[]
+    PskId: byte[]
+    Info: byte[]
+    Aad: byte[]
+    Plaintext: byte[]
+}
+
+type AuthPskOpenRequest = {
+    Suite: HpkeSuite
+    RecipientPrivateKey: byte[]
+    SenderPublicKey: byte[]
+    EncappedKey: byte[]
+    Psk: byte[]
+    PskId: byte[]
+    Info: byte[]
+    Aad: byte[]
+    Ciphertext: byte[]
+}
