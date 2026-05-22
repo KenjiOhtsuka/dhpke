@@ -4,6 +4,7 @@
     <Project Path="samples/Hpke.Sample.FSharp/Hpke.Sample.FSharp.fsproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Hpke.CSharp/Hpke.CSharp.csproj" />
     <Project Path="src/Hpke/Hpke.fsproj" />
   </Folder>
   <Folder Name="/tests/">

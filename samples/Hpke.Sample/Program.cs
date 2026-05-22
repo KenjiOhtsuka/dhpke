@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Text;
-using Hpke.Core;
+using Hpke.CSharp;
 
 internal static class Program
 {
@@ -8,7 +8,7 @@ internal static class Program
 
 	public static void Main()
 	{
-		var suite = Suites.Default;
+		var suite = HpkeSuite.DhKemP256_HkdfSha256_AesGcm128;
 
 		RunBase(suite);
 		RunPsk(suite);
@@ -18,60 +18,60 @@ internal static class Program
 
 	private static void RunBase(HpkeSuite suite)
 	{
-		var (recipientSk, recipientPk) = Crypto.generateEcdhP256KeyPair();
+		var recipient = HpkeKeyPair.Generate();
 		var plaintext = Utf8.GetBytes("base mode from C#");
 
-		var sealResult = Base.Seal(new BaseSealRequest(suite, recipientPk, Array.Empty<byte>(), Array.Empty<byte>(), plaintext));
+		var sender = HpkeSenderContext.Setup(suite, recipient.PublicKey);
+		var sealedValue = sender.Seal(plaintext);
+		var recipientContext = HpkeRecipientContext.Setup(suite, recipient.PrivateKey, sealedValue.EncappedKey);
+		var openResult = recipientContext.Open(sealedValue.Ciphertext);
 
-		var sealedValue = RequireOk(sealResult, "Base seal");
-		var openResult = Base.Open(new BaseOpenRequest(suite, recipientSk, sealedValue.EncappedKey, Array.Empty<byte>(), Array.Empty<byte>(), sealedValue.Ciphertext));
-
-		PrintRoundtrip("Base", plaintext, RequireOk(openResult, "Base open"));
+		PrintRoundtrip("Base", plaintext, openResult);
 	}
 
 	private static void RunPsk(HpkeSuite suite)
 	{
-		var (recipientSk, recipientPk) = Crypto.generateEcdhP256KeyPair();
+		var recipient = HpkeKeyPair.Generate();
 		var plaintext = Utf8.GetBytes("psk mode from C#");
 		var psk = new byte[] { 1, 2, 3 };
 		var pskId = new byte[] { 9 };
 
-		var sealResult = Psk.Seal(new PskSealRequest(suite, recipientPk, psk, pskId, Array.Empty<byte>(), Array.Empty<byte>(), plaintext));
+		var sender = HpkeSenderContext.Setup(suite, recipient.PublicKey, psk, pskId);
+		var sealedValue = sender.Seal(plaintext);
+		var recipientContext = HpkeRecipientContext.Setup(suite, recipient.PrivateKey, sealedValue.EncappedKey, psk, pskId);
+		var openResult = recipientContext.Open(sealedValue.Ciphertext);
 
-		var sealedValue = RequireOk(sealResult, "PSK seal");
-		var openResult = Psk.Open(new PskOpenRequest(suite, recipientSk, sealedValue.EncappedKey, psk, pskId, Array.Empty<byte>(), Array.Empty<byte>(), sealedValue.Ciphertext));
-
-		PrintRoundtrip("PSK", plaintext, RequireOk(openResult, "PSK open"));
+		PrintRoundtrip("PSK", plaintext, openResult);
 	}
 
 	private static void RunAuth(HpkeSuite suite)
 	{
-		var (recipientSk, recipientPk) = Crypto.generateEcdhP256KeyPair();
-		var (senderSk, senderPk) = Crypto.generateEcdhP256KeyPair();
+		var recipient = HpkeKeyPair.Generate();
+		var sender = HpkeKeyPair.Generate();
 		var plaintext = Utf8.GetBytes("auth mode from C#");
 
-		var sealResult = Auth.Seal(new AuthSealRequest(suite, recipientPk, senderSk, Array.Empty<byte>(), Array.Empty<byte>(), plaintext));
+		var senderContext = HpkeSenderContext.Setup(suite, recipient.PublicKey, sender.PrivateKey);
+		var sealedValue = senderContext.Seal(plaintext);
+		var recipientContext = HpkeRecipientContext.Setup(suite, recipient.PrivateKey, sealedValue.EncappedKey, sender.PublicKey);
+		var openResult = recipientContext.Open(sealedValue.Ciphertext);
 
-		var sealedValue = RequireOk(sealResult, "Auth seal");
-		var openResult = Auth.Open(new AuthOpenRequest(suite, recipientSk, senderPk, sealedValue.EncappedKey, Array.Empty<byte>(), Array.Empty<byte>(), sealedValue.Ciphertext));
-
-		PrintRoundtrip("Auth", plaintext, RequireOk(openResult, "Auth open"));
+		PrintRoundtrip("Auth", plaintext, openResult);
 	}
 
 	private static void RunAuthPsk(HpkeSuite suite)
 	{
-		var (recipientSk, recipientPk) = Crypto.generateEcdhP256KeyPair();
-		var (senderSk, senderPk) = Crypto.generateEcdhP256KeyPair();
+		var recipient = HpkeKeyPair.Generate();
+		var sender = HpkeKeyPair.Generate();
 		var plaintext = Utf8.GetBytes("auth psk mode from C#");
 		var psk = new byte[] { 1, 2, 3 };
 		var pskId = new byte[] { 9 };
 
-		var sealResult = AuthPsk.Seal(new AuthPskSealRequest(suite, recipientPk, senderSk, psk, pskId, Array.Empty<byte>(), Array.Empty<byte>(), plaintext));
+		var senderContext = HpkeSenderContext.Setup(suite, recipient.PublicKey, sender.PrivateKey, psk, pskId);
+		var sealedValue = senderContext.Seal(plaintext);
+		var recipientContext = HpkeRecipientContext.Setup(suite, recipient.PrivateKey, sealedValue.EncappedKey, sender.PublicKey, psk, pskId);
+		var openResult = recipientContext.Open(sealedValue.Ciphertext);
 
-		var sealedValue = RequireOk(sealResult, "AuthPSK seal");
-		var openResult = AuthPsk.Open(new AuthPskOpenRequest(suite, recipientSk, senderPk, sealedValue.EncappedKey, psk, pskId, Array.Empty<byte>(), Array.Empty<byte>(), sealedValue.Ciphertext));
-
-		PrintRoundtrip("AuthPSK", plaintext, RequireOk(openResult, "AuthPSK open"));
+		PrintRoundtrip("AuthPSK", plaintext, openResult);
 	}
 
 	private static void PrintRoundtrip(string label, byte[] plaintext, byte[] opened)
@@ -79,13 +79,4 @@ internal static class Program
 		Console.WriteLine($"{label}: {Utf8.GetString(plaintext)} -> {Utf8.GetString(opened)}");
 	}
 
-	private static T RequireOk<T, TError>(Microsoft.FSharp.Core.FSharpResult<T, TError> result, string stage)
-	{
-		if (result.IsOk)
-		{
-			return result.ResultValue;
-		}
-
-		throw new InvalidOperationException($"{stage} failed: {result.ErrorValue}");
-	}
 }

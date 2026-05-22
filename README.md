@@ -5,6 +5,7 @@ HPKE implementation for .NET with an F# core and a thin public surface.
 ## What is included
 
 - `src/Hpke`: core HPKE implementation and helpers
+- `src/Hpke.CSharp`: C# facade with context-style and one-shot APIs
 - `tests/Hpke.Tests`: xUnit tests for the supported modes
 - `tests/Hpke.Tests/rfc9180_vectors.json`: RFC 9180 Appendix A.3 reference fixtures for the supported P-256 / HKDF-SHA256 / AES-128-GCM suite
 - `samples/Hpke.Sample`: C# sample app
