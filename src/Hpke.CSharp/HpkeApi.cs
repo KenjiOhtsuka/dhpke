@@ -64,6 +64,26 @@ public sealed class HpkeKeyPair
     }
 }
 
+public delegate (byte[] EncappedKey, byte[] Shared) KemEncapsulateDelegate(byte[] recipientPublicKey);
+public delegate byte[] KemDecapsulateDelegate(byte[] recipientPrivateKey, byte[] encappedKey);
+public delegate byte[] KdfExtractDelegate(byte[]? salt, byte[] ikm);
+public delegate byte[] KdfExpandDelegate(byte[] prk, byte[] info, int length);
+public delegate byte[] AeadEncryptDelegate(byte[] key, byte[] nonce, byte[] aad, byte[] plaintext);
+public delegate byte[]? AeadDecryptDelegate(byte[] key, byte[] nonce, byte[] aad, byte[] ciphertext);
+
+public sealed class HpkeStrategies
+{
+    public KemEncapsulateDelegate? KemEncapsulate { get; init; }
+    public KemDecapsulateDelegate? KemDecapsulate { get; init; }
+    public KdfExtractDelegate? KdfExtract { get; init; }
+    public KdfExpandDelegate? KdfExpand { get; init; }
+    public AeadEncryptDelegate? AeadEncrypt { get; init; }
+    public AeadDecryptDelegate? AeadDecrypt { get; init; }
+    public int KeySize { get; init; } = 16;
+    public int NonceSize { get; init; } = 12;
+    public int TagSize { get; init; } = 16;
+}
+
 public sealed class HpkeSealedValue
 {
     public HpkeSealedValue(byte[] encappedKey, byte[] ciphertext)
@@ -119,6 +139,39 @@ public sealed class HpkeConfig
         EncappedKey = encappedKey;
     }
 
+    // New constructor accepting optional C# strategies for custom algorithms
+    private HpkeConfig(
+        HpkeModeKind mode,
+        HpkeSuite suite,
+        HpkeKemAlgorithm kem,
+        HpkeKdfAlgorithm kdf,
+        HpkeAeadAlgorithm aead,
+        byte[]? recipientPublicKey,
+        byte[]? recipientPrivateKey,
+        byte[]? senderPrivateKey,
+        byte[]? senderPublicKey,
+        byte[] info,
+        byte[]? psk,
+        byte[]? pskId,
+        byte[]? encappedKey,
+        HpkeStrategies? strategies)
+    {
+        Mode = mode;
+        Suite = suite;
+        this.kem = kem;
+        this.kdf = kdf;
+        this.aead = aead;
+        RecipientPublicKey = recipientPublicKey;
+        RecipientPrivateKey = recipientPrivateKey;
+        SenderPrivateKey = senderPrivateKey;
+        SenderPublicKey = senderPublicKey;
+        Info = info;
+        Psk = psk;
+        PskId = pskId;
+        EncappedKey = encappedKey;
+        Strategies = strategies;
+    }
+
     public HpkeModeKind Mode { get; }
 
     public HpkeSuite Suite { get; }
@@ -145,13 +198,15 @@ public sealed class HpkeConfig
 
     public byte[]? EncappedKey { get; }
 
+    public HpkeStrategies? Strategies { get; }
+
     public static HpkeConfig ForBaseSender(
         HpkeKemAlgorithm kem,
         HpkeKdfAlgorithm kdf,
         HpkeAeadAlgorithm aead,
         byte[] recipientPublicKey,
         byte[]? info = null)
-        => new(HpkeModeKind.Base, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, null, null, Normalize(info), null, null, null);
+        => new(HpkeModeKind.Base, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, null, null, Normalize(info), null, null, null, null);
 
     public static HpkeConfig ForBaseRecipient(
         HpkeKemAlgorithm kem,
@@ -160,7 +215,7 @@ public sealed class HpkeConfig
         byte[] recipientPrivateKey,
         byte[] encappedKey,
         byte[]? info = null)
-        => new(HpkeModeKind.Base, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, null, Normalize(info), null, null, RequireBytes(encappedKey, nameof(encappedKey)));
+        => new(HpkeModeKind.Base, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, null, Normalize(info), null, null, RequireBytes(encappedKey, nameof(encappedKey)), null);
 
     public static HpkeConfig ForPskSender(
         HpkeKemAlgorithm kem,
@@ -170,7 +225,7 @@ public sealed class HpkeConfig
         byte[] psk,
         byte[] pskId,
         byte[]? info = null)
-        => new(HpkeModeKind.Psk, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, null, null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), null);
+        => new(HpkeModeKind.Psk, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, null, null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), null, null);
 
     public static HpkeConfig ForPskRecipient(
         HpkeKemAlgorithm kem,
@@ -181,7 +236,7 @@ public sealed class HpkeConfig
         byte[] psk,
         byte[] pskId,
         byte[]? info = null)
-        => new(HpkeModeKind.Psk, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), RequireBytes(encappedKey, nameof(encappedKey)));
+        => new(HpkeModeKind.Psk, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), RequireBytes(encappedKey, nameof(encappedKey)), null);
 
     public static HpkeConfig ForAuthSender(
         HpkeKemAlgorithm kem,
@@ -190,7 +245,7 @@ public sealed class HpkeConfig
         byte[] recipientPublicKey,
         byte[] senderPrivateKey,
         byte[]? info = null)
-        => new(HpkeModeKind.Auth, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, RequireBytes(senderPrivateKey, nameof(senderPrivateKey)), null, Normalize(info), null, null, null);
+        => new(HpkeModeKind.Auth, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, RequireBytes(senderPrivateKey, nameof(senderPrivateKey)), null, Normalize(info), null, null, null, null);
 
     public static HpkeConfig ForAuthRecipient(
         HpkeKemAlgorithm kem,
@@ -200,7 +255,7 @@ public sealed class HpkeConfig
         byte[] encappedKey,
         byte[] senderPublicKey,
         byte[]? info = null)
-        => new(HpkeModeKind.Auth, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, RequireBytes(senderPublicKey, nameof(senderPublicKey)), Normalize(info), null, null, RequireBytes(encappedKey, nameof(encappedKey)));
+        => new(HpkeModeKind.Auth, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, RequireBytes(senderPublicKey, nameof(senderPublicKey)), Normalize(info), null, null, RequireBytes(encappedKey, nameof(encappedKey)), null);
 
     public static HpkeConfig ForAuthPskSender(
         HpkeKemAlgorithm kem,
@@ -211,7 +266,7 @@ public sealed class HpkeConfig
         byte[] psk,
         byte[] pskId,
         byte[]? info = null)
-        => new(HpkeModeKind.AuthPsk, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, RequireBytes(senderPrivateKey, nameof(senderPrivateKey)), null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), null);
+        => new(HpkeModeKind.AuthPsk, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, RequireBytes(senderPrivateKey, nameof(senderPrivateKey)), null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), null, null);
 
     public static HpkeConfig ForAuthPskRecipient(
         HpkeKemAlgorithm kem,
@@ -223,31 +278,39 @@ public sealed class HpkeConfig
         byte[] psk,
         byte[] pskId,
         byte[]? info = null)
-        => new(HpkeModeKind.AuthPsk, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, RequireBytes(senderPublicKey, nameof(senderPublicKey)), Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), RequireBytes(encappedKey, nameof(encappedKey)));
+        => new(HpkeModeKind.AuthPsk, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, RequireBytes(senderPublicKey, nameof(senderPublicKey)), Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), RequireBytes(encappedKey, nameof(encappedKey)), null);
 
     public static HpkeConfig ForBaseSender(HpkeSuite suite, byte[] recipientPublicKey, byte[]? info = null)
-        => new(HpkeModeKind.Base, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, null, null, Normalize(info), null, null, null);
+        => new(HpkeModeKind.Base, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, null, null, Normalize(info), null, null, null, null);
+
+    // Overload that accepts custom C# strategies for algorithms
+    public static HpkeConfig ForBaseSender(HpkeSuite suite, byte[] recipientPublicKey, HpkeStrategies? strategies, byte[]? info = null)
+        => new(HpkeModeKind.Base, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, null, null, Normalize(info), null, null, null, strategies);
 
     public static HpkeConfig ForBaseRecipient(HpkeSuite suite, byte[] recipientPrivateKey, byte[] encappedKey, byte[]? info = null)
-        => new(HpkeModeKind.Base, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, null, Normalize(info), null, null, RequireBytes(encappedKey, nameof(encappedKey)));
+        => new(HpkeModeKind.Base, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, null, Normalize(info), null, null, RequireBytes(encappedKey, nameof(encappedKey)), null);
+
+    // Overload that accepts custom C# strategies for algorithms
+    public static HpkeConfig ForBaseRecipient(HpkeSuite suite, byte[] recipientPrivateKey, byte[] encappedKey, HpkeStrategies? strategies, byte[]? info = null)
+        => new(HpkeModeKind.Base, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, null, Normalize(info), null, null, RequireBytes(encappedKey, nameof(encappedKey)), strategies);
 
     public static HpkeConfig ForPskSender(HpkeSuite suite, byte[] recipientPublicKey, byte[] psk, byte[] pskId, byte[]? info = null)
-        => new(HpkeModeKind.Psk, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, null, null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), null);
+        => new(HpkeModeKind.Psk, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, null, null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), null, null);
 
     public static HpkeConfig ForPskRecipient(HpkeSuite suite, byte[] recipientPrivateKey, byte[] encappedKey, byte[] psk, byte[] pskId, byte[]? info = null)
-        => new(HpkeModeKind.Psk, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), RequireBytes(encappedKey, nameof(encappedKey)));
+        => new(HpkeModeKind.Psk, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), RequireBytes(encappedKey, nameof(encappedKey)), null);
 
     public static HpkeConfig ForAuthSender(HpkeSuite suite, byte[] recipientPublicKey, byte[] senderPrivateKey, byte[]? info = null)
-        => new(HpkeModeKind.Auth, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, RequireBytes(senderPrivateKey, nameof(senderPrivateKey)), null, Normalize(info), null, null, null);
+        => new(HpkeModeKind.Auth, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, RequireBytes(senderPrivateKey, nameof(senderPrivateKey)), null, Normalize(info), null, null, null, null);
 
     public static HpkeConfig ForAuthRecipient(HpkeSuite suite, byte[] recipientPrivateKey, byte[] encappedKey, byte[] senderPublicKey, byte[]? info = null)
-        => new(HpkeModeKind.Auth, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, RequireBytes(senderPublicKey, nameof(senderPublicKey)), Normalize(info), null, null, RequireBytes(encappedKey, nameof(encappedKey)));
+        => new(HpkeModeKind.Auth, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, RequireBytes(senderPublicKey, nameof(senderPublicKey)), Normalize(info), null, null, RequireBytes(encappedKey, nameof(encappedKey)), null);
 
     public static HpkeConfig ForAuthPskSender(HpkeSuite suite, byte[] recipientPublicKey, byte[] senderPrivateKey, byte[] psk, byte[] pskId, byte[]? info = null)
-        => new(HpkeModeKind.AuthPsk, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, RequireBytes(senderPrivateKey, nameof(senderPrivateKey)), null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), null);
+        => new(HpkeModeKind.AuthPsk, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, RequireBytes(senderPrivateKey, nameof(senderPrivateKey)), null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), null, null);
 
     public static HpkeConfig ForAuthPskRecipient(HpkeSuite suite, byte[] recipientPrivateKey, byte[] encappedKey, byte[] senderPublicKey, byte[] psk, byte[] pskId, byte[]? info = null)
-        => new(HpkeModeKind.AuthPsk, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, RequireBytes(senderPublicKey, nameof(senderPublicKey)), Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), RequireBytes(encappedKey, nameof(encappedKey)));
+        => new(HpkeModeKind.AuthPsk, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, RequireBytes(senderPublicKey, nameof(senderPublicKey)), Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), RequireBytes(encappedKey, nameof(encappedKey)), null);
 
     private static byte[] Normalize(byte[]? value) => value is null ? Array.Empty<byte>() : value;
 
@@ -345,6 +408,191 @@ public static class Hpke
 
     internal static HpkeSealedValue Seal(HpkeConfig config, byte[] plaintext, byte[] aad)
     {
+        // If C# strategies are provided on the config, perform the operation in C# using them.
+        if (config.Strategies is not null)
+        {
+            var s = config.Strategies;
+            switch (config.Mode)
+            {
+                case HpkeModeKind.Base:
+                {
+                    // Encapsulate
+                    byte[] epk;
+                    byte[] shared1;
+                    if (s.KemEncapsulate is not null)
+                    {
+                        (epk, shared1) = s.KemEncapsulate(config.RecipientPublicKey!);
+                    }
+                    else
+                    {
+                        var pair = Crypto.generateEcdhP256KeyPair();
+                        epk = pair.Item2;
+                        shared1 = Crypto.deriveSharedSecret(pair.Item1, config.RecipientPublicKey!);
+                    }
+
+                    // KDF
+                    byte[] prk;
+                    if (s.KdfExtract is not null)
+                        prk = s.KdfExtract(null, shared1);
+                    else
+                        prk = Crypto.hkdfExtract(null, shared1);
+
+                    byte[] key;
+                    if (s.KdfExpand is not null)
+                        key = s.KdfExpand(prk, config.Info, s.KeySize);
+                    else
+                        key = Crypto.hkdfExpand(prk, config.Info, 32);
+
+                    var nonceInfo = ConcatArrays(config.Info, new byte[] { 0 });
+
+                    byte[] nonce;
+                    if (s.KdfExpand is not null)
+                        nonce = s.KdfExpand(prk, nonceInfo, s.NonceSize);
+                    else
+                        nonce = Crypto.hkdfExpand(prk, nonceInfo, 12);
+
+                    byte[] ct;
+                    if (s.AeadEncrypt is not null)
+                        ct = s.AeadEncrypt(key, nonce, aad, plaintext);
+                    else
+                        ct = Crypto.aesGcmEncrypt(key, nonce, aad, plaintext);
+                    return new HpkeSealedValue(epk, ct);
+                }
+                case HpkeModeKind.Psk:
+                {
+                    byte[] epk;
+                    byte[] shared1;
+                    if (s.KemEncapsulate is not null)
+                    {
+                        (epk, shared1) = s.KemEncapsulate(config.RecipientPublicKey!);
+                    }
+                    else
+                    {
+                        var pair = Crypto.generateEcdhP256KeyPair();
+                        epk = pair.Item2;
+                        shared1 = Crypto.deriveSharedSecret(pair.Item1, config.RecipientPublicKey!);
+                    }
+
+                    byte[] prkPsk;
+                    if (s.KdfExtract is not null)
+                        prkPsk = s.KdfExtract(config.Psk, shared1);
+                    else
+                        prkPsk = Crypto.hkdfExtract(config.Psk, shared1);
+
+                    byte[] keyPsk;
+                    if (s.KdfExpand is not null)
+                        keyPsk = s.KdfExpand(prkPsk, config.Info, s.KeySize);
+                    else
+                        keyPsk = Crypto.hkdfExpand(prkPsk, config.Info, 32);
+
+                    var nonceInfoPsk = ConcatArrays(config.Info, new byte[] { 0 });
+
+                    byte[] noncePsk;
+                    if (s.KdfExpand is not null)
+                        noncePsk = s.KdfExpand(prkPsk, nonceInfoPsk, s.NonceSize);
+                    else
+                        noncePsk = Crypto.hkdfExpand(prkPsk, nonceInfoPsk, 12);
+
+                    byte[] ctPsk;
+                    if (s.AeadEncrypt is not null)
+                        ctPsk = s.AeadEncrypt(keyPsk, noncePsk, aad, plaintext);
+                    else
+                        ctPsk = Crypto.aesGcmEncrypt(keyPsk, noncePsk, aad, plaintext);
+                    return new HpkeSealedValue(epk, ctPsk);
+                }
+                case HpkeModeKind.Auth:
+                {
+                    byte[] epk;
+                    byte[] shared1;
+                    if (s.KemEncapsulate is not null)
+                    {
+                        (epk, shared1) = s.KemEncapsulate(config.RecipientPublicKey!);
+                    }
+                    else
+                    {
+                        var pair = Crypto.generateEcdhP256KeyPair();
+                        epk = pair.Item2;
+                        shared1 = Crypto.deriveSharedSecret(pair.Item1, config.RecipientPublicKey!);
+                    }
+
+                    var sharedAuth = Crypto.deriveSharedSecret(config.SenderPrivateKey!, config.RecipientPublicKey!);
+                    var combined = ConcatArrays(shared1, sharedAuth);
+                    byte[] prkAuth;
+                    if (s.KdfExtract is not null)
+                        prkAuth = s.KdfExtract(null, combined);
+                    else
+                        prkAuth = Crypto.hkdfExtract(null, combined);
+
+                    byte[] keyAuth;
+                    if (s.KdfExpand is not null)
+                        keyAuth = s.KdfExpand(prkAuth, config.Info, s.KeySize);
+                    else
+                        keyAuth = Crypto.hkdfExpand(prkAuth, config.Info, 32);
+
+                    var nonceInfoAuth = ConcatArrays(config.Info, new byte[] { 0 });
+
+                    byte[] nonceAuth;
+                    if (s.KdfExpand is not null)
+                        nonceAuth = s.KdfExpand(prkAuth, nonceInfoAuth, s.NonceSize);
+                    else
+                        nonceAuth = Crypto.hkdfExpand(prkAuth, nonceInfoAuth, 12);
+
+                    byte[] ctAuth;
+                    if (s.AeadEncrypt is not null)
+                        ctAuth = s.AeadEncrypt(keyAuth, nonceAuth, aad, plaintext);
+                    else
+                        ctAuth = Crypto.aesGcmEncrypt(keyAuth, nonceAuth, aad, plaintext);
+                    return new HpkeSealedValue(epk, ctAuth);
+                }
+                case HpkeModeKind.AuthPsk:
+                {
+                    byte[] epk;
+                    byte[] shared1;
+                    if (s.KemEncapsulate is not null)
+                    {
+                        (epk, shared1) = s.KemEncapsulate(config.RecipientPublicKey!);
+                    }
+                    else
+                    {
+                        var pair = Crypto.generateEcdhP256KeyPair();
+                        epk = pair.Item2;
+                        shared1 = Crypto.deriveSharedSecret(pair.Item1, config.RecipientPublicKey!);
+                    }
+
+                    var sharedAuth = Crypto.deriveSharedSecret(config.SenderPrivateKey!, config.RecipientPublicKey!);
+                    var combined = ConcatArrays(shared1, sharedAuth);
+                    byte[] prkAuthPsk;
+                    if (s.KdfExtract is not null)
+                        prkAuthPsk = s.KdfExtract(config.Psk, combined);
+                    else
+                        prkAuthPsk = Crypto.hkdfExtract(config.Psk, combined);
+
+                    byte[] keyAuthPsk;
+                    if (s.KdfExpand is not null)
+                        keyAuthPsk = s.KdfExpand(prkAuthPsk, config.Info, s.KeySize);
+                    else
+                        keyAuthPsk = Crypto.hkdfExpand(prkAuthPsk, config.Info, 32);
+
+                    var nonceInfoAuthPsk = ConcatArrays(config.Info, new byte[] { 0 });
+
+                    byte[] nonceAuthPsk;
+                    if (s.KdfExpand is not null)
+                        nonceAuthPsk = s.KdfExpand(prkAuthPsk, nonceInfoAuthPsk, s.NonceSize);
+                    else
+                        nonceAuthPsk = Crypto.hkdfExpand(prkAuthPsk, nonceInfoAuthPsk, 12);
+
+                    byte[] ctAuthPsk;
+                    if (s.AeadEncrypt is not null)
+                        ctAuthPsk = s.AeadEncrypt(keyAuthPsk, nonceAuthPsk, aad, plaintext);
+                    else
+                        ctAuthPsk = Crypto.aesGcmEncrypt(keyAuthPsk, nonceAuthPsk, aad, plaintext);
+                    return new HpkeSealedValue(epk, ctAuthPsk);
+                }
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
         var result = config.Mode switch
         {
             HpkeModeKind.Base => Base.Seal(CreateBaseSealRequest(config, plaintext, aad)),
@@ -359,6 +607,172 @@ public static class Hpke
 
     internal static byte[] Open(HpkeConfig config, byte[] ciphertext, byte[] aad)
     {
+        if (config.Strategies is not null)
+        {
+            var s = config.Strategies;
+            switch (config.Mode)
+            {
+                case HpkeModeKind.Base:
+                {
+                    byte[] shared1;
+                    if (s.KemDecapsulate is not null)
+                    {
+                        shared1 = s.KemDecapsulate(config.RecipientPrivateKey!, config.EncappedKey!);
+                    }
+                    else
+                    {
+                        shared1 = Crypto.deriveSharedSecret(config.RecipientPrivateKey!, config.EncappedKey!);
+                    }
+
+                    byte[] prkOpen;
+                    if (s.KdfExtract is not null)
+                        prkOpen = s.KdfExtract(null, shared1);
+                    else
+                        prkOpen = Crypto.hkdfExtract(null, shared1);
+
+                    byte[] keyOpen;
+                    if (s.KdfExpand is not null)
+                        keyOpen = s.KdfExpand(prkOpen, config.Info, s.KeySize);
+                    else
+                        keyOpen = Crypto.hkdfExpand(prkOpen, config.Info, 32);
+
+                    var nonceInfoOpen = ConcatArrays(config.Info, new byte[] { 0 });
+
+                    byte[] nonceOpen;
+                    if (s.KdfExpand is not null)
+                        nonceOpen = s.KdfExpand(prkOpen, nonceInfoOpen, s.NonceSize);
+                    else
+                        nonceOpen = Crypto.hkdfExpand(prkOpen, nonceInfoOpen, 12);
+
+                    byte[]? ptOpen;
+                    if (s.AeadDecrypt is not null)
+                        ptOpen = s.AeadDecrypt(keyOpen, nonceOpen, aad, ciphertext);
+                    else
+                    {
+                        var maybe = Crypto.aesGcmDecrypt(keyOpen, nonceOpen, aad, ciphertext);
+                        ptOpen = maybe == null ? null : maybe.Value;
+                    }
+
+                    if (ptOpen is null) throw new CryptographicException("Open failed: decryption failed");
+                    return ptOpen;
+                }
+                case HpkeModeKind.Psk:
+                {
+                    byte[] shared1 = s.KemDecapsulate is not null ? s.KemDecapsulate(config.RecipientPrivateKey!, config.EncappedKey!) : Crypto.deriveSharedSecret(config.RecipientPrivateKey!, config.EncappedKey!);
+
+                    byte[] prkPskOpen;
+                    if (s.KdfExtract is not null)
+                        prkPskOpen = s.KdfExtract(config.Psk, shared1);
+                    else
+                        prkPskOpen = Crypto.hkdfExtract(config.Psk, shared1);
+
+                    byte[] keyPskOpen;
+                    if (s.KdfExpand is not null)
+                        keyPskOpen = s.KdfExpand(prkPskOpen, config.Info, s.KeySize);
+                    else
+                        keyPskOpen = Crypto.hkdfExpand(prkPskOpen, config.Info, 32);
+
+                    var nonceInfoPskOpen = ConcatArrays(config.Info, new byte[] { 0 });
+
+                    byte[] noncePskOpen;
+                    if (s.KdfExpand is not null)
+                        noncePskOpen = s.KdfExpand(prkPskOpen, nonceInfoPskOpen, s.NonceSize);
+                    else
+                        noncePskOpen = Crypto.hkdfExpand(prkPskOpen, nonceInfoPskOpen, 12);
+
+                    byte[]? ptPskOpen;
+                    if (s.AeadDecrypt is not null)
+                        ptPskOpen = s.AeadDecrypt(keyPskOpen, noncePskOpen, aad, ciphertext);
+                    else
+                    {
+                        var maybe = Crypto.aesGcmDecrypt(keyPskOpen, noncePskOpen, aad, ciphertext);
+                        ptPskOpen = maybe == null ? null : maybe.Value;
+                    }
+
+                    if (ptPskOpen is null) throw new CryptographicException("Open failed: decryption failed");
+                    return ptPskOpen;
+                }
+                case HpkeModeKind.Auth:
+                {
+                    byte[] shared1 = s.KemDecapsulate is not null ? s.KemDecapsulate(config.RecipientPrivateKey!, config.EncappedKey!) : Crypto.deriveSharedSecret(config.RecipientPrivateKey!, config.EncappedKey!);
+                    var sharedAuth = Crypto.deriveSharedSecret(config.SenderPublicKey!, config.RecipientPrivateKey!);
+                    var combined = ConcatArrays(shared1, sharedAuth);
+
+                    byte[] prkAuthOpen;
+                    if (s.KdfExtract is not null)
+                        prkAuthOpen = s.KdfExtract(null, combined);
+                    else
+                        prkAuthOpen = Crypto.hkdfExtract(null, combined);
+
+                    byte[] keyAuthOpen;
+                    if (s.KdfExpand is not null)
+                        keyAuthOpen = s.KdfExpand(prkAuthOpen, config.Info, s.KeySize);
+                    else
+                        keyAuthOpen = Crypto.hkdfExpand(prkAuthOpen, config.Info, 32);
+
+                    var nonceInfoAuthOpen = ConcatArrays(config.Info, new byte[] { 0 });
+
+                    byte[] nonceAuthOpen;
+                    if (s.KdfExpand is not null)
+                        nonceAuthOpen = s.KdfExpand(prkAuthOpen, nonceInfoAuthOpen, s.NonceSize);
+                    else
+                        nonceAuthOpen = Crypto.hkdfExpand(prkAuthOpen, nonceInfoAuthOpen, 12);
+
+                    byte[]? ptAuthOpen;
+                    if (s.AeadDecrypt is not null)
+                        ptAuthOpen = s.AeadDecrypt(keyAuthOpen, nonceAuthOpen, aad, ciphertext);
+                    else
+                    {
+                        var maybe = Crypto.aesGcmDecrypt(keyAuthOpen, nonceAuthOpen, aad, ciphertext);
+                        ptAuthOpen = maybe == null ? null : maybe.Value;
+                    }
+
+                    if (ptAuthOpen is null) throw new CryptographicException("Open failed: decryption failed");
+                    return ptAuthOpen;
+                }
+                case HpkeModeKind.AuthPsk:
+                {
+                    byte[] shared1 = s.KemDecapsulate is not null ? s.KemDecapsulate(config.RecipientPrivateKey!, config.EncappedKey!) : Crypto.deriveSharedSecret(config.RecipientPrivateKey!, config.EncappedKey!);
+                    var sharedAuth = Crypto.deriveSharedSecret(config.SenderPublicKey!, config.RecipientPrivateKey!);
+                    var combined = ConcatArrays(shared1, sharedAuth);
+
+                    byte[] prkAuthPskOpen;
+                    if (s.KdfExtract is not null)
+                        prkAuthPskOpen = s.KdfExtract(config.Psk, combined);
+                    else
+                        prkAuthPskOpen = Crypto.hkdfExtract(config.Psk, combined);
+
+                    byte[] keyAuthPskOpen;
+                    if (s.KdfExpand is not null)
+                        keyAuthPskOpen = s.KdfExpand(prkAuthPskOpen, config.Info, s.KeySize);
+                    else
+                        keyAuthPskOpen = Crypto.hkdfExpand(prkAuthPskOpen, config.Info, 32);
+
+                    var nonceInfoAuthPskOpen = ConcatArrays(config.Info, new byte[] { 0 });
+
+                    byte[] nonceAuthPskOpen;
+                    if (s.KdfExpand is not null)
+                        nonceAuthPskOpen = s.KdfExpand(prkAuthPskOpen, nonceInfoAuthPskOpen, s.NonceSize);
+                    else
+                        nonceAuthPskOpen = Crypto.hkdfExpand(prkAuthPskOpen, nonceInfoAuthPskOpen, 12);
+
+                    byte[]? ptAuthPskOpen;
+                    if (s.AeadDecrypt is not null)
+                        ptAuthPskOpen = s.AeadDecrypt(keyAuthPskOpen, nonceAuthPskOpen, aad, ciphertext);
+                    else
+                    {
+                        var maybe = Crypto.aesGcmDecrypt(keyAuthPskOpen, nonceAuthPskOpen, aad, ciphertext);
+                        ptAuthPskOpen = maybe == null ? null : maybe.Value;
+                    }
+
+                    if (ptAuthPskOpen is null) throw new CryptographicException("Open failed: decryption failed");
+                    return ptAuthPskOpen;
+                }
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
         var result = config.Mode switch
         {
             HpkeModeKind.Base => Base.Open(CreateBaseOpenRequest(config, ciphertext, aad)),
@@ -425,4 +839,12 @@ public static class Hpke
 
     private static byte[] Require(byte[]? value, string name)
         => value ?? throw new ArgumentNullException(name);
+
+    private static byte[] ConcatArrays(byte[] a, byte[] b)
+    {
+        var res = new byte[a.Length + b.Length];
+        Buffer.BlockCopy(a, 0, res, 0, a.Length);
+        Buffer.BlockCopy(b, 0, res, a.Length, b.Length);
+        return res;
+    }
 }
