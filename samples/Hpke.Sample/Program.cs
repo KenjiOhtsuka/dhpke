@@ -18,5 +18,5 @@ internal static class Program
 		try { CustomSample.Run(suite); } catch (Exception ex) { Console.WriteLine($"RunCustom failed: {ex.Message}"); }
 	}
 
-    
+
 }

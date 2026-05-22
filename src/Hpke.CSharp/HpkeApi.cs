@@ -348,6 +348,16 @@ public sealed class HpkeSenderContext
     public static HpkeSenderContext Setup(HpkeSuite suite, byte[] recipientPublicKey, byte[] psk, byte[] pskId, byte[]? info = null)
         => Setup(HpkeConfig.ForPskSender(suite, recipientPublicKey, psk, pskId, info));
 
+    // Explicit named helpers to avoid overload ambiguity between PSK and Auth variants.
+    public static HpkeSenderContext SetupPsk(HpkeSuite suite, byte[] recipientPublicKey, byte[] psk, byte[] pskId, byte[]? info = null)
+        => Setup(HpkeConfig.ForPskSender(suite, recipientPublicKey, psk, pskId, info));
+
+    public static HpkeSenderContext SetupAuth(HpkeSuite suite, byte[] recipientPublicKey, byte[] senderPrivateKey, byte[]? info = null)
+        => Setup(HpkeConfig.ForAuthSender(suite, recipientPublicKey, senderPrivateKey, info));
+
+    public static HpkeSenderContext SetupAuthPsk(HpkeSuite suite, byte[] recipientPublicKey, byte[] senderPrivateKey, byte[] psk, byte[] pskId, byte[]? info = null)
+        => Setup(HpkeConfig.ForAuthPskSender(suite, recipientPublicKey, senderPrivateKey, psk, pskId, info));
+
     public static HpkeSenderContext Setup(HpkeSuite suite, byte[] recipientPublicKey, byte[] senderPrivateKey, byte[]? info = null)
         => Setup(HpkeConfig.ForAuthSender(suite, recipientPublicKey, senderPrivateKey, info));
 
@@ -378,6 +388,16 @@ public sealed class HpkeRecipientContext
 
     public static HpkeRecipientContext Setup(HpkeSuite suite, byte[] recipientPrivateKey, byte[] encappedKey, byte[] psk, byte[] pskId, byte[]? info = null)
         => Setup(HpkeConfig.ForPskRecipient(suite, recipientPrivateKey, encappedKey, psk, pskId, info));
+
+    // Explicit named helpers to avoid overload ambiguity between PSK and Auth variants.
+    public static HpkeRecipientContext SetupPsk(HpkeSuite suite, byte[] recipientPrivateKey, byte[] encappedKey, byte[] psk, byte[] pskId, byte[]? info = null)
+        => Setup(HpkeConfig.ForPskRecipient(suite, recipientPrivateKey, encappedKey, psk, pskId, info));
+
+    public static HpkeRecipientContext SetupAuth(HpkeSuite suite, byte[] recipientPrivateKey, byte[] encappedKey, byte[] senderPublicKey, byte[]? info = null)
+        => Setup(HpkeConfig.ForAuthRecipient(suite, recipientPrivateKey, encappedKey, senderPublicKey, info));
+
+    public static HpkeRecipientContext SetupAuthPsk(HpkeSuite suite, byte[] recipientPrivateKey, byte[] encappedKey, byte[] senderPublicKey, byte[] psk, byte[] pskId, byte[]? info = null)
+        => Setup(HpkeConfig.ForAuthPskRecipient(suite, recipientPrivateKey, encappedKey, senderPublicKey, psk, pskId, info));
 
     public static HpkeRecipientContext Setup(HpkeSuite suite, byte[] recipientPrivateKey, byte[] encappedKey, byte[] senderPublicKey, byte[]? info = null)
         => Setup(HpkeConfig.ForAuthRecipient(suite, recipientPrivateKey, encappedKey, senderPublicKey, info));
