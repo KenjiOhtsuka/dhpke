@@ -136,10 +136,62 @@ let runAuthPsk () =
     |> requireOk "AuthPSK open"
     |> printRoundtrip "AuthPSK" plaintext
 
+let runCustom () =
+    // Example custom strategies that wrap the built-in Crypto functions.
+    let kemStrategy = {
+        Encapsulate = fun recipientPub ->
+            // For demonstration we reuse ECDH pair generation and derive shared secret
+            let (esk, epk) = Crypto.generateEcdhP256KeyPair ()
+            let shared = Crypto.deriveSharedSecret esk recipientPub
+            (epk, shared)
+        Decapsulate = fun recipientPriv enc ->
+            Crypto.deriveSharedSecret recipientPriv enc
+    }
+
+    let kdfStrategy = {
+        Extract = fun salt ikm -> Crypto.hkdfExtract (if salt.IsSome then salt.Value else null) ikm
+        Expand = fun prk info len -> Crypto.hkdfExpand prk info len
+    }
+
+    let aeadStrategy = {
+        Encrypt = fun key nonce aad pt -> Crypto.aesGcmEncrypt key nonce aad pt
+        Decrypt = fun key nonce aad ct -> Crypto.aesGcmDecrypt key nonce aad ct
+        KeySize = 16
+        NonceSize = 12
+        TagSize = 16
+    }
+
+    let custom = { HpkeStrategies.KemStr = Some kemStrategy; KdfStr = Some kdfStrategy; AeadStr = Some aeadStrategy }
+
+    let recipientSk, recipientPk = Crypto.generateEcdhP256KeyPair ()
+    let plaintext = utf8.GetBytes "custom strategy base mode from F#"
+
+    let sealedValue =
+        Hpke.Hpke.BaseSealWithStrategies kem kdf aead (Some custom) {
+            Suite = suite
+            RecipientPublicKey = recipientPk
+            Info = [||]
+            Aad = [||]
+            Plaintext = plaintext
+        }
+        |> requireOk "Custom Base seal"
+
+    Hpke.Hpke.BaseOpenWithStrategies kem kdf aead (Some custom) {
+        Suite = suite
+        RecipientPrivateKey = recipientSk
+        EncappedKey = sealedValue.EncappedKey
+        Info = [||]
+        Aad = [||]
+        Ciphertext = sealedValue.Ciphertext
+    }
+    |> requireOk "Custom Base open"
+    |> printRoundtrip "CustomBase" plaintext
+
 [<EntryPoint>]
 let main _ =
     runBase ()
     runPsk ()
     runAuth ()
     runAuthPsk ()
+    runCustom ()
     0

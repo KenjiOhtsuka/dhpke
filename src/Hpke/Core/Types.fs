@@ -30,14 +30,39 @@ type HpkeSuite = {
     Aead: AeadAlgorithm
 }
 
+// Strategy records to allow plugging custom algorithm implementations at runtime.
+type KemStrategy = {
+    Encapsulate: byte[] -> byte[] * byte[]
+    Decapsulate: byte[] -> byte[] -> byte[]
+}
+
+type KdfStrategy = {
+    Extract: byte[] option -> byte[] -> byte[]
+    Expand: byte[] -> byte[] -> int -> byte[]
+}
+
+type AeadStrategy = {
+    Encrypt: byte[] -> byte[] -> byte[] -> byte[] -> byte[]
+    Decrypt: byte[] -> byte[] -> byte[] -> byte[] -> byte[] option
+    KeySize: int
+    NonceSize: int
+    TagSize: int
+}
+
+type HpkeStrategies = {
+    KemStr: KemStrategy option
+    KdfStr: KdfStrategy option
+    AeadStr: AeadStrategy option
+}
+
 module Suites =
-    let Default = {
+    let Default : HpkeSuite = {
         Kem = DhKemP256HkdfSha256
         Kdf = HkdfSha256
         Aead = Aes128Gcm
     }
 
-    let create kem kdf aead = {
+    let create kem kdf aead : HpkeSuite = {
         Kem = kem
         Kdf = kdf
         Aead = aead
