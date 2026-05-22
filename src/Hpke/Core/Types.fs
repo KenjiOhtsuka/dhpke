@@ -30,6 +30,33 @@ type HpkeSuite = {
     Aead: AeadAlgorithm
 }
 
+module Suites =
+    let Default = {
+        Kem = DhKemP256HkdfSha256
+        Kdf = HkdfSha256
+        Aead = Aes128Gcm
+    }
+
+    let Supported = [ Default ]
+
+    let isSupportedKem = function
+        | CustomKem _ -> false
+        | _ -> true
+
+    let isSupportedKdf = function
+        | CustomKdf _ -> false
+        | _ -> true
+
+    let isSupportedAead = function
+        | CustomAead _ -> false
+        | _ -> true
+
+    let isSupportedSuite (suite: HpkeSuite) =
+        suite.Kem = Default.Kem
+        && suite.Kdf = Default.Kdf
+        && suite.Aead = Default.Aead
+
+
 type BaseSealRequest = {
     Suite: HpkeSuite
     RecipientPublicKey: byte[]

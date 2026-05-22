@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/samples/">
     <Project Path="samples/Hpke.Sample/Hpke.Sample.csproj" />
+    <Project Path="samples/Hpke.Sample.FSharp/Hpke.Sample.FSharp.fsproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Hpke/Hpke.fsproj" />

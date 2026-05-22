@@ -28,60 +28,24 @@ module AuthPsk =
         match RequestValidation.requireNotNull "Suite" request.Suite with
         | Error error -> Error error
         | Ok suite ->
-            match RequestValidation.requireNotEmptyBytes "RecipientPublicKey" request.RecipientPublicKey with
-            | Error error -> Error error
-            | Ok recipientPublicKey ->
-                match RequestValidation.requireNotEmptyBytes "SenderPrivateKey" request.SenderPrivateKey with
+            if not (Suites.isSupportedSuite suite) then
+                Error (InvalidArgument("Suite", "Only the P-256 / HKDF-SHA256 / AES-128-GCM suite is currently implemented"))
+            else
+                match RequestValidation.requireNotEmptyBytes "RecipientPublicKey" request.RecipientPublicKey with
                 | Error error -> Error error
-                | Ok senderPrivateKey ->
-                    match RequestValidation.requireNotEmptyBytes "Psk" request.Psk with
+                | Ok recipientPublicKey ->
+                    match RequestValidation.requireNotEmptyBytes "SenderPrivateKey" request.SenderPrivateKey with
                     | Error error -> Error error
-                    | Ok psk ->
-                        match RequestValidation.requireNotNull "PskId" request.PskId with
-                        | Error error -> Error error
-                        | Ok pskId ->
-                            match RequestValidation.requireNotNull "Plaintext" request.Plaintext with
-                            | Error error -> Error error
-                            | Ok plaintext ->
-                                match RequestValidation.requireNotNull "Info" request.Info with
-                                | Error error -> Error error
-                                | Ok info ->
-                                    match RequestValidation.requireNotNull "Aad" request.Aad with
-                                    | Error error -> Error error
-                                    | Ok aad ->
-                                        Ok {
-                                            Suite = suite
-                                            RecipientPublicKey = recipientPublicKey
-                                            SenderPrivateKey = senderPrivateKey
-                                            Psk = psk
-                                            PskId = pskId
-                                            Info = info
-                                            Aad = aad
-                                            Plaintext = plaintext
-                                        }
-
-    let private validateOpenRequest (request: AuthPskOpenRequest) =
-        match RequestValidation.requireNotNull "Suite" request.Suite with
-        | Error error -> Error error
-        | Ok suite ->
-            match RequestValidation.requireNotEmptyBytes "RecipientPrivateKey" request.RecipientPrivateKey with
-            | Error error -> Error error
-            | Ok recipientPrivateKey ->
-                match RequestValidation.requireNotEmptyBytes "SenderPublicKey" request.SenderPublicKey with
-                | Error error -> Error error
-                | Ok senderPublicKey ->
-                    match RequestValidation.requireNotEmptyBytes "EncappedKey" request.EncappedKey with
-                    | Error error -> Error error
-                    | Ok encappedKey ->
+                    | Ok senderPrivateKey ->
                         match RequestValidation.requireNotEmptyBytes "Psk" request.Psk with
                         | Error error -> Error error
                         | Ok psk ->
                             match RequestValidation.requireNotNull "PskId" request.PskId with
                             | Error error -> Error error
                             | Ok pskId ->
-                                match RequestValidation.requireNotNull "Ciphertext" request.Ciphertext with
+                                match RequestValidation.requireNotNull "Plaintext" request.Plaintext with
                                 | Error error -> Error error
-                                | Ok ciphertext ->
+                                | Ok plaintext ->
                                     match RequestValidation.requireNotNull "Info" request.Info with
                                     | Error error -> Error error
                                     | Ok info ->
@@ -90,15 +54,57 @@ module AuthPsk =
                                         | Ok aad ->
                                             Ok {
                                                 Suite = suite
-                                                RecipientPrivateKey = recipientPrivateKey
-                                                SenderPublicKey = senderPublicKey
-                                                EncappedKey = encappedKey
+                                                RecipientPublicKey = recipientPublicKey
+                                                SenderPrivateKey = senderPrivateKey
                                                 Psk = psk
                                                 PskId = pskId
                                                 Info = info
                                                 Aad = aad
-                                                Ciphertext = ciphertext
+                                                Plaintext = plaintext
                                             }
+
+    let private validateOpenRequest (request: AuthPskOpenRequest) =
+        match RequestValidation.requireNotNull "Suite" request.Suite with
+        | Error error -> Error error
+        | Ok suite ->
+            if not (Suites.isSupportedSuite suite) then
+                Error (InvalidArgument("Suite", "Only the P-256 / HKDF-SHA256 / AES-128-GCM suite is currently implemented"))
+            else
+                match RequestValidation.requireNotEmptyBytes "RecipientPrivateKey" request.RecipientPrivateKey with
+                | Error error -> Error error
+                | Ok recipientPrivateKey ->
+                    match RequestValidation.requireNotEmptyBytes "SenderPublicKey" request.SenderPublicKey with
+                    | Error error -> Error error
+                    | Ok senderPublicKey ->
+                        match RequestValidation.requireNotEmptyBytes "EncappedKey" request.EncappedKey with
+                        | Error error -> Error error
+                        | Ok encappedKey ->
+                            match RequestValidation.requireNotEmptyBytes "Psk" request.Psk with
+                            | Error error -> Error error
+                            | Ok psk ->
+                                match RequestValidation.requireNotNull "PskId" request.PskId with
+                                | Error error -> Error error
+                                | Ok pskId ->
+                                    match RequestValidation.requireNotNull "Ciphertext" request.Ciphertext with
+                                    | Error error -> Error error
+                                    | Ok ciphertext ->
+                                        match RequestValidation.requireNotNull "Info" request.Info with
+                                        | Error error -> Error error
+                                        | Ok info ->
+                                            match RequestValidation.requireNotNull "Aad" request.Aad with
+                                            | Error error -> Error error
+                                            | Ok aad ->
+                                                Ok {
+                                                    Suite = suite
+                                                    RecipientPrivateKey = recipientPrivateKey
+                                                    SenderPublicKey = senderPublicKey
+                                                    EncappedKey = encappedKey
+                                                    Psk = psk
+                                                    PskId = pskId
+                                                    Info = info
+                                                    Aad = aad
+                                                    Ciphertext = ciphertext
+                                                }
 
     open Crypto
 
