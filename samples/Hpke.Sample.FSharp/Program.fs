@@ -5,7 +5,11 @@ open System.Text
 open Hpke.Core
 
 let utf8 = Encoding.UTF8
-let suite = Suites.Default
+let kem = DhKemP256HkdfSha256
+let kdf = HkdfSha256
+let aead = Aes128Gcm
+
+let suite = Suites.create kem kdf aead
 
 let printRoundtrip label plaintext opened =
     printfn "%s: %s -> %s" label (utf8.GetString plaintext) (utf8.GetString opened)
@@ -19,7 +23,7 @@ let runBase () =
     let plaintext = utf8.GetBytes "base mode from F#"
 
     let sealedValue =
-        Base.Seal {
+        Hpke.Hpke.BaseSealWithAlgorithms kem kdf aead {
             Suite = suite
             RecipientPublicKey = recipientPk
             Info = [||]
@@ -28,7 +32,7 @@ let runBase () =
         }
         |> requireOk "Base seal"
 
-    Base.Open {
+    Hpke.Hpke.BaseOpenWithAlgorithms kem kdf aead {
         Suite = suite
         RecipientPrivateKey = recipientSk
         EncappedKey = sealedValue.EncappedKey
@@ -46,7 +50,7 @@ let runPsk () =
     let pskId = [| 9uy |]
 
     let sealedValue =
-        Psk.Seal {
+        Hpke.Hpke.PskSealWithAlgorithms kem kdf aead {
             Suite = suite
             RecipientPublicKey = recipientPk
             Psk = psk
@@ -57,7 +61,7 @@ let runPsk () =
         }
         |> requireOk "PSK seal"
 
-    Psk.Open {
+    Hpke.Hpke.PskOpenWithAlgorithms kem kdf aead {
         Suite = suite
         RecipientPrivateKey = recipientSk
         EncappedKey = sealedValue.EncappedKey
@@ -76,7 +80,7 @@ let runAuth () =
     let plaintext = utf8.GetBytes "auth mode from F#"
 
     let sealedValue =
-        Auth.Seal {
+        Hpke.Hpke.AuthSealWithAlgorithms kem kdf aead {
             Suite = suite
             RecipientPublicKey = recipientPk
             SenderPrivateKey = senderSk
@@ -86,7 +90,7 @@ let runAuth () =
         }
         |> requireOk "Auth seal"
 
-    Auth.Open {
+    Hpke.Hpke.AuthOpenWithAlgorithms kem kdf aead {
         Suite = suite
         RecipientPrivateKey = recipientSk
         SenderPublicKey = senderPk
@@ -106,7 +110,7 @@ let runAuthPsk () =
     let pskId = [| 9uy |]
 
     let sealedValue =
-        AuthPsk.Seal {
+        Hpke.Hpke.AuthPskSealWithAlgorithms kem kdf aead {
             Suite = suite
             RecipientPublicKey = recipientPk
             SenderPrivateKey = senderSk
@@ -118,7 +122,7 @@ let runAuthPsk () =
         }
         |> requireOk "AuthPSK seal"
 
-    AuthPsk.Open {
+    Hpke.Hpke.AuthPskOpenWithAlgorithms kem kdf aead {
         Suite = suite
         RecipientPrivateKey = recipientSk
         SenderPublicKey = senderPk
@@ -132,8 +136,10 @@ let runAuthPsk () =
     |> requireOk "AuthPSK open"
     |> printRoundtrip "AuthPSK" plaintext
 
-do
+[<EntryPoint>]
+let main _ =
     runBase ()
     runPsk ()
     runAuth ()
     runAuthPsk ()
+    0

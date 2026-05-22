@@ -10,6 +10,27 @@ public enum HpkeSuite
     DhKemP256_HkdfSha256_AesGcm128,
 }
 
+public enum HpkeKemAlgorithm
+{
+    DhKemP256HkdfSha256,
+    DhKemP384HkdfSha384,
+    DhKemP521HkdfSha512,
+}
+
+public enum HpkeKdfAlgorithm
+{
+    HkdfSha256,
+    HkdfSha384,
+    HkdfSha512,
+}
+
+public enum HpkeAeadAlgorithm
+{
+    Aes128Gcm,
+    Aes256Gcm,
+    ChaCha20Poly1305,
+}
+
 public enum HpkeModeKind
 {
     Base,
@@ -64,9 +85,16 @@ public sealed class HpkeSealedValue
 
 public sealed class HpkeConfig
 {
+    private readonly HpkeKemAlgorithm kem;
+    private readonly HpkeKdfAlgorithm kdf;
+    private readonly HpkeAeadAlgorithm aead;
+
     private HpkeConfig(
         HpkeModeKind mode,
         HpkeSuite suite,
+        HpkeKemAlgorithm kem,
+        HpkeKdfAlgorithm kdf,
+        HpkeAeadAlgorithm aead,
         byte[]? recipientPublicKey,
         byte[]? recipientPrivateKey,
         byte[]? senderPrivateKey,
@@ -78,6 +106,9 @@ public sealed class HpkeConfig
     {
         Mode = mode;
         Suite = suite;
+        this.kem = kem;
+        this.kdf = kdf;
+        this.aead = aead;
         RecipientPublicKey = recipientPublicKey;
         RecipientPrivateKey = recipientPrivateKey;
         SenderPrivateKey = senderPrivateKey;
@@ -91,6 +122,12 @@ public sealed class HpkeConfig
     public HpkeModeKind Mode { get; }
 
     public HpkeSuite Suite { get; }
+
+    public HpkeKemAlgorithm Kem => kem;
+
+    public HpkeKdfAlgorithm Kdf => kdf;
+
+    public HpkeAeadAlgorithm Aead => aead;
 
     public byte[]? RecipientPublicKey { get; }
 
@@ -108,29 +145,109 @@ public sealed class HpkeConfig
 
     public byte[]? EncappedKey { get; }
 
+    public static HpkeConfig ForBaseSender(
+        HpkeKemAlgorithm kem,
+        HpkeKdfAlgorithm kdf,
+        HpkeAeadAlgorithm aead,
+        byte[] recipientPublicKey,
+        byte[]? info = null)
+        => new(HpkeModeKind.Base, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, null, null, Normalize(info), null, null, null);
+
+    public static HpkeConfig ForBaseRecipient(
+        HpkeKemAlgorithm kem,
+        HpkeKdfAlgorithm kdf,
+        HpkeAeadAlgorithm aead,
+        byte[] recipientPrivateKey,
+        byte[] encappedKey,
+        byte[]? info = null)
+        => new(HpkeModeKind.Base, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, null, Normalize(info), null, null, RequireBytes(encappedKey, nameof(encappedKey)));
+
+    public static HpkeConfig ForPskSender(
+        HpkeKemAlgorithm kem,
+        HpkeKdfAlgorithm kdf,
+        HpkeAeadAlgorithm aead,
+        byte[] recipientPublicKey,
+        byte[] psk,
+        byte[] pskId,
+        byte[]? info = null)
+        => new(HpkeModeKind.Psk, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, null, null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), null);
+
+    public static HpkeConfig ForPskRecipient(
+        HpkeKemAlgorithm kem,
+        HpkeKdfAlgorithm kdf,
+        HpkeAeadAlgorithm aead,
+        byte[] recipientPrivateKey,
+        byte[] encappedKey,
+        byte[] psk,
+        byte[] pskId,
+        byte[]? info = null)
+        => new(HpkeModeKind.Psk, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), RequireBytes(encappedKey, nameof(encappedKey)));
+
+    public static HpkeConfig ForAuthSender(
+        HpkeKemAlgorithm kem,
+        HpkeKdfAlgorithm kdf,
+        HpkeAeadAlgorithm aead,
+        byte[] recipientPublicKey,
+        byte[] senderPrivateKey,
+        byte[]? info = null)
+        => new(HpkeModeKind.Auth, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, RequireBytes(senderPrivateKey, nameof(senderPrivateKey)), null, Normalize(info), null, null, null);
+
+    public static HpkeConfig ForAuthRecipient(
+        HpkeKemAlgorithm kem,
+        HpkeKdfAlgorithm kdf,
+        HpkeAeadAlgorithm aead,
+        byte[] recipientPrivateKey,
+        byte[] encappedKey,
+        byte[] senderPublicKey,
+        byte[]? info = null)
+        => new(HpkeModeKind.Auth, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, RequireBytes(senderPublicKey, nameof(senderPublicKey)), Normalize(info), null, null, RequireBytes(encappedKey, nameof(encappedKey)));
+
+    public static HpkeConfig ForAuthPskSender(
+        HpkeKemAlgorithm kem,
+        HpkeKdfAlgorithm kdf,
+        HpkeAeadAlgorithm aead,
+        byte[] recipientPublicKey,
+        byte[] senderPrivateKey,
+        byte[] psk,
+        byte[] pskId,
+        byte[]? info = null)
+        => new(HpkeModeKind.AuthPsk, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, RequireBytes(senderPrivateKey, nameof(senderPrivateKey)), null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), null);
+
+    public static HpkeConfig ForAuthPskRecipient(
+        HpkeKemAlgorithm kem,
+        HpkeKdfAlgorithm kdf,
+        HpkeAeadAlgorithm aead,
+        byte[] recipientPrivateKey,
+        byte[] encappedKey,
+        byte[] senderPublicKey,
+        byte[] psk,
+        byte[] pskId,
+        byte[]? info = null)
+        => new(HpkeModeKind.AuthPsk, DefaultSuiteIfSupported(kem, kdf, aead), kem, kdf, aead, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, RequireBytes(senderPublicKey, nameof(senderPublicKey)), Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), RequireBytes(encappedKey, nameof(encappedKey)));
+
     public static HpkeConfig ForBaseSender(HpkeSuite suite, byte[] recipientPublicKey, byte[]? info = null)
-        => new(HpkeModeKind.Base, suite, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, null, null, Normalize(info), null, null, null);
+        => new(HpkeModeKind.Base, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, null, null, Normalize(info), null, null, null);
 
     public static HpkeConfig ForBaseRecipient(HpkeSuite suite, byte[] recipientPrivateKey, byte[] encappedKey, byte[]? info = null)
-        => new(HpkeModeKind.Base, suite, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, null, Normalize(info), null, null, RequireBytes(encappedKey, nameof(encappedKey)));
+        => new(HpkeModeKind.Base, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, null, Normalize(info), null, null, RequireBytes(encappedKey, nameof(encappedKey)));
 
     public static HpkeConfig ForPskSender(HpkeSuite suite, byte[] recipientPublicKey, byte[] psk, byte[] pskId, byte[]? info = null)
-        => new(HpkeModeKind.Psk, suite, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, null, null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), null);
+        => new(HpkeModeKind.Psk, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, null, null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), null);
 
     public static HpkeConfig ForPskRecipient(HpkeSuite suite, byte[] recipientPrivateKey, byte[] encappedKey, byte[] psk, byte[] pskId, byte[]? info = null)
-        => new(HpkeModeKind.Psk, suite, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), RequireBytes(encappedKey, nameof(encappedKey)));
+        => new(HpkeModeKind.Psk, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), RequireBytes(encappedKey, nameof(encappedKey)));
 
     public static HpkeConfig ForAuthSender(HpkeSuite suite, byte[] recipientPublicKey, byte[] senderPrivateKey, byte[]? info = null)
-        => new(HpkeModeKind.Auth, suite, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, RequireBytes(senderPrivateKey, nameof(senderPrivateKey)), null, Normalize(info), null, null, null);
+        => new(HpkeModeKind.Auth, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, RequireBytes(senderPrivateKey, nameof(senderPrivateKey)), null, Normalize(info), null, null, null);
 
     public static HpkeConfig ForAuthRecipient(HpkeSuite suite, byte[] recipientPrivateKey, byte[] encappedKey, byte[] senderPublicKey, byte[]? info = null)
-        => new(HpkeModeKind.Auth, suite, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, RequireBytes(senderPublicKey, nameof(senderPublicKey)), Normalize(info), null, null, RequireBytes(encappedKey, nameof(encappedKey)));
+        => new(HpkeModeKind.Auth, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, RequireBytes(senderPublicKey, nameof(senderPublicKey)), Normalize(info), null, null, RequireBytes(encappedKey, nameof(encappedKey)));
 
     public static HpkeConfig ForAuthPskSender(HpkeSuite suite, byte[] recipientPublicKey, byte[] senderPrivateKey, byte[] psk, byte[] pskId, byte[]? info = null)
-        => new(HpkeModeKind.AuthPsk, suite, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, RequireBytes(senderPrivateKey, nameof(senderPrivateKey)), null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), null);
+        => new(HpkeModeKind.AuthPsk, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, RequireBytes(recipientPublicKey, nameof(recipientPublicKey)), null, RequireBytes(senderPrivateKey, nameof(senderPrivateKey)), null, Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), null);
 
     public static HpkeConfig ForAuthPskRecipient(HpkeSuite suite, byte[] recipientPrivateKey, byte[] encappedKey, byte[] senderPublicKey, byte[] psk, byte[] pskId, byte[]? info = null)
-        => new(HpkeModeKind.AuthPsk, suite, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, RequireBytes(senderPublicKey, nameof(senderPublicKey)), Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), RequireBytes(encappedKey, nameof(encappedKey)));
+        => new(HpkeModeKind.AuthPsk, suite, HpkeKemAlgorithm.DhKemP256HkdfSha256, HpkeKdfAlgorithm.HkdfSha256, HpkeAeadAlgorithm.Aes128Gcm, null, RequireBytes(recipientPrivateKey, nameof(recipientPrivateKey)), null, RequireBytes(senderPublicKey, nameof(senderPublicKey)), Normalize(info), RequireBytes(psk, nameof(psk)), Normalize(pskId), RequireBytes(encappedKey, nameof(encappedKey)));
 
     private static byte[] Normalize(byte[]? value) => value is null ? Array.Empty<byte>() : value;
 
@@ -138,6 +255,16 @@ public sealed class HpkeConfig
     {
         ArgumentNullException.ThrowIfNull(value, name);
         return value;
+    }
+
+    private static HpkeSuite DefaultSuiteIfSupported(HpkeKemAlgorithm kem, HpkeKdfAlgorithm kdf, HpkeAeadAlgorithm aead)
+    {
+        if (kem == HpkeKemAlgorithm.DhKemP256HkdfSha256 && kdf == HpkeKdfAlgorithm.HkdfSha256 && aead == HpkeAeadAlgorithm.Aes128Gcm)
+        {
+            return HpkeSuite.DhKemP256_HkdfSha256_AesGcm128;
+        }
+
+        throw new NotSupportedException($"Unsupported algorithm combination: {kem}/{kdf}/{aead}");
     }
 }
 

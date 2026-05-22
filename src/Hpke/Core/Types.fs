@@ -37,6 +37,12 @@ module Suites =
         Aead = Aes128Gcm
     }
 
+    let create kem kdf aead = {
+        Kem = kem
+        Kdf = kdf
+        Aead = aead
+    }
+
     let Supported = [ Default ]
 
     let isSupportedKem = function
