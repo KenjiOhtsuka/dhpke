@@ -1,19 +1,26 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
 
     <!-- Packaging metadata for core F# library -->
-    <PackageId>DhPke.Hpke</PackageId>
-    <Version>0.1.0</Version>
-    <Authors>dhpke</Authors>
-    <Company>dhpke</Company>
+    <PackageId>Dhpke.Hpke</PackageId>
+    <Version>0.1.3</Version>
+    <Authors>Kenji Otsuka</Authors>
+    <!-- <Company>dhpke</Company> -->
     <Description>HPKE core primitives and mode implementations (F#). Do not reference this package directly from untrusted code.</Description>
     <PackageTags>hpke;cryptography;hpke-fsharp;hpke-core</PackageTags>
-    <RepositoryUrl>https://github.com/your/repo</RepositoryUrl>
+    <RepositoryUrl>https://github.com/KenjiOhtsuka/dhpke</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
 
   <ItemGroup>
     <Compile Include="Core\Types.fs" />
