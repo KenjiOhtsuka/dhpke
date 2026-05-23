@@ -11,6 +11,12 @@ module Crypto =
         let pub = e.PublicKey.ExportSubjectPublicKeyInfo()
         (priv, pub)
 
+    let publicKeyFromPrivatePkcs8 (privatePkcs8: byte[]) : byte[] =
+        use priv = ECDiffieHellman.Create()
+        let mutable read = 0
+        priv.ImportPkcs8PrivateKey(ReadOnlySpan privatePkcs8, &read)
+        priv.PublicKey.ExportSubjectPublicKeyInfo()
+
     let deriveSharedSecret (privatePkcs8: byte[]) (peerPublicSpki: byte[]) : byte[] =
         use priv = ECDiffieHellman.Create()
         let mutable read = 0
@@ -20,6 +26,13 @@ module Crypto =
         peer.ImportSubjectPublicKeyInfo(ReadOnlySpan peerPublicSpki, &read2)
         let secret = priv.DeriveKeyFromHash(peer.PublicKey, HashAlgorithmName.SHA256)
         secret
+
+    /// Encapsulate using a provided ephemeral private key (PKCS#8) and recipient public SPKI.
+    /// Returns (epk_spki, shared_secret)
+    let encapsulateWithEphemeralPrivate (eskPkcs8: byte[]) (recipientPublicSpki: byte[]) : byte[] * byte[] =
+        let epk = publicKeyFromPrivatePkcs8 eskPkcs8
+        let shared = deriveSharedSecret eskPkcs8 recipientPublicSpki
+        (epk, shared)
 
     let hkdfExtract (salt: byte[]) (ikm: byte[]) : byte[] =
         let actualSalt = if isNull salt then Array.zeroCreate 32 else salt
