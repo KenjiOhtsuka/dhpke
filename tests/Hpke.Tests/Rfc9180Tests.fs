@@ -36,6 +36,16 @@ let ``rfc9180 official vector fixture matches expected outputs`` () =
     let toString (e: JsonElement) = e.GetString()
 
     // Helper to attempt verifying fields if present in the vector JSON.
+    // HKDF-Expand-Label per RFC-style: HkdfLabel = length(2) || labelLen(1) || label || ctxLen(1) || context
+    let hkdfExpandLabel (prk: byte[]) (label: string) (context: byte[]) (length: int) : byte[] =
+        let prefix = "HPKE-v1 "
+        let lblBytes = System.Text.Encoding.ASCII.GetBytes(prefix + label)
+        let lenBytes = [| byte (length >>> 8); byte (length &&& 0xFF) |]
+        let lblLen = [| byte lblBytes.Length |]
+        let ctxLen = [| byte context.Length |]
+        let info = Array.concat [lenBytes; lblLen; lblBytes; ctxLen; context]
+        Hpke.Core.Crypto.hkdfExpand prk info length
+
     for element in doc.RootElement.EnumerateArray() do
         match get element "name" with
         | Some nameEl ->
@@ -91,6 +101,25 @@ let ``rfc9180 official vector fixture matches expected outputs`` () =
                     let prk = Hpke.Core.Crypto.hkdfExtract null shared
                     let actualKey = Hpke.Core.Crypto.hkdfExpand prk (Array.empty<byte>) expected.Length
                     Assert.Equal<byte[]>(expected, actualKey)
+                | None -> ()
+
+                // Verify exporter outputs if present: hkdfExpand(exporter_secret, exporter_context, L)
+                match get element "exporter_secret" with
+                | Some expEl ->
+                    let expSec = hex (expEl.GetString())
+                    match get element "exports" with
+                    | Some exportsEl ->
+                        for ex in exportsEl.EnumerateArray() do
+                            let mutable tmp = Unchecked.defaultof<JsonElement>
+                            let ctx = if ex.TryGetProperty("exporter_context", &tmp) then hex (ex.GetProperty("exporter_context").GetString()) else Array.empty<byte>
+                            let mutable tmp2 = Unchecked.defaultof<JsonElement>
+                            let l = if ex.TryGetProperty("L", &tmp2) then ex.GetProperty("L").GetInt32() else 0
+                            let mutable tmp3 = Unchecked.defaultof<JsonElement>
+                            let expected = if ex.TryGetProperty("exported_value", &tmp3) then hex (ex.GetProperty("exported_value").GetString()) else Array.empty<byte>
+                            // Strict HKDF-Expand-Label construction (no fallback)
+                            let labeled = hkdfExpandLabel expSec "exporter" ctx expected.Length
+                            Assert.Equal<byte[]>(expected, labeled)
+                    | None -> ()
                 | None -> ()
             | _ -> ()
         | None -> ()
