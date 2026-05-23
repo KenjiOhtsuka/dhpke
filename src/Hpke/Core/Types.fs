@@ -1,5 +1,7 @@
 namespace Hpke.Core
 
+open System.Security.Cryptography
+
 type HpkeMode =
     | Base
     | Psk
@@ -56,11 +58,43 @@ type HpkeStrategies = {
 }
 
 module Suites =
-    let Default : HpkeSuite = {
+    let DefaultAes128 : HpkeSuite = {
         Kem = DhKemP256HkdfSha256
         Kdf = HkdfSha256
         Aead = Aes128Gcm
     }
+
+    let DefaultAes256 : HpkeSuite = {
+        Kem = DhKemP256HkdfSha256
+        Kdf = HkdfSha256
+        Aead = Aes256Gcm
+    }
+
+    let DefaultP384Aes128 : HpkeSuite = {
+        Kem = DhKemP384HkdfSha384
+        Kdf = HkdfSha384
+        Aead = Aes128Gcm
+    }
+
+    let DefaultP384Aes256 : HpkeSuite = {
+        Kem = DhKemP384HkdfSha384
+        Kdf = HkdfSha384
+        Aead = Aes256Gcm
+    }
+
+    let DefaultP521Aes128 : HpkeSuite = {
+        Kem = DhKemP521HkdfSha512
+        Kdf = HkdfSha512
+        Aead = Aes128Gcm
+    }
+
+    let DefaultP521Aes256 : HpkeSuite = {
+        Kem = DhKemP521HkdfSha512
+        Kdf = HkdfSha512
+        Aead = Aes256Gcm
+    }
+
+    let Default = DefaultAes128
 
     let create kem kdf aead : HpkeSuite = {
         Kem = kem
@@ -68,24 +102,39 @@ module Suites =
         Aead = aead
     }
 
-    let Supported = [ Default ]
+    let Supported = [ DefaultAes128; DefaultAes256; DefaultP384Aes128; DefaultP384Aes256; DefaultP521Aes128; DefaultP521Aes256 ]
 
     let isSupportedKem = function
-        | CustomKem _ -> false
-        | _ -> true
+        | DhKemP256HkdfSha256
+        | DhKemP384HkdfSha384
+        | DhKemP521HkdfSha512 -> true
+        | _ -> false
 
     let isSupportedKdf = function
         | CustomKdf _ -> false
         | _ -> true
 
     let isSupportedAead = function
-        | CustomAead _ -> false
-        | _ -> true
+        | Aes128Gcm
+        | Aes256Gcm -> true
+        | _ -> false
 
     let isSupportedSuite (suite: HpkeSuite) =
-        suite.Kem = Default.Kem
-        && suite.Kdf = Default.Kdf
-        && suite.Aead = Default.Aead
+        isSupportedKem suite.Kem
+        && isSupportedKdf suite.Kdf
+        && isSupportedAead suite.Aead
+
+    let kdfHash = function
+        | HkdfSha256 -> HashAlgorithmName("SHA256")
+        | HkdfSha384 -> HashAlgorithmName("SHA384")
+        | HkdfSha512 -> HashAlgorithmName("SHA512")
+        | CustomKdf name -> invalidArg "kdf" (sprintf "Unsupported custom KDF %s; provide a custom strategy instead" name)
+
+    let aeadKeySize = function
+        | Aes128Gcm -> 16
+        | Aes256Gcm -> 32
+        | ChaCha20Poly1305 -> 32
+        | CustomAead name -> invalidArg "aead" (sprintf "Unsupported custom AEAD %s; provide a custom strategy instead" name)
 
 
 type BaseSealRequest = {

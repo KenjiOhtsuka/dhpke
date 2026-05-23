@@ -7,8 +7,8 @@ internal static class AuthSample
     {
         try
         {
-            var recipient = HpkeKeyPair.Generate();
-            var sender = HpkeKeyPair.Generate();
+            var recipient = SampleHelpers.GenerateKeyPair(suite);
+            var sender = SampleHelpers.GenerateKeyPair(suite);
             var plaintext = SampleHelpers.Utf8.GetBytes("auth mode from C#");
 
             var senderContext = HpkeSenderContext.SetupAuth(suite, recipient.PublicKey, sender.PrivateKey);
@@ -21,21 +21,51 @@ internal static class AuthSample
         catch (Exception)
         {
             // Fallback: simple authenticated-like construction using ECDH contributions
-            var recipient = HpkeKeyPair.Generate();
-            var sender = HpkeKeyPair.Generate();
+            var recipient = SampleHelpers.GenerateKeyPair(suite);
+            var sender = SampleHelpers.GenerateKeyPair(suite);
             var plaintext = SampleHelpers.Utf8.GetBytes("auth fallback from C#");
 
-            var pair = Hpke.Core.Crypto.generateEcdhP256KeyPair();
+            var pair = suite switch
+            {
+                HpkeSuite.DhKemP384_HkdfSha384_AesGcm128 or HpkeSuite.DhKemP384_HkdfSha384_AesGcm256 => Hpke.Core.Crypto.generateEcdhP384KeyPair(),
+                HpkeSuite.DhKemP521_HkdfSha512_AesGcm128 or HpkeSuite.DhKemP521_HkdfSha512_AesGcm256 => Hpke.Core.Crypto.generateEcdhP521KeyPair(),
+                _ => Hpke.Core.Crypto.generateEcdhP256KeyPair()
+            };
             var esk = pair.Item1;
             var epk = pair.Item2;
-            var shared1 = Hpke.Core.Crypto.deriveSharedSecret(esk, recipient.PublicKey);
-            var sharedAuth = Hpke.Core.Crypto.deriveSharedSecret(sender.PrivateKey, recipient.PublicKey);
+            var shared1 = suite switch
+            {
+                HpkeSuite.DhKemP384_HkdfSha384_AesGcm128 or HpkeSuite.DhKemP384_HkdfSha384_AesGcm256 => Hpke.Core.Crypto.deriveSharedSecretP384(esk, recipient.PublicKey),
+                HpkeSuite.DhKemP521_HkdfSha512_AesGcm128 or HpkeSuite.DhKemP521_HkdfSha512_AesGcm256 => Hpke.Core.Crypto.deriveSharedSecretP521(esk, recipient.PublicKey),
+                _ => Hpke.Core.Crypto.deriveSharedSecret(esk, recipient.PublicKey)
+            };
+            var sharedAuth = suite switch
+            {
+                HpkeSuite.DhKemP384_HkdfSha384_AesGcm128 or HpkeSuite.DhKemP384_HkdfSha384_AesGcm256 => Hpke.Core.Crypto.deriveSharedSecretP384(sender.PrivateKey, recipient.PublicKey),
+                HpkeSuite.DhKemP521_HkdfSha512_AesGcm128 or HpkeSuite.DhKemP521_HkdfSha512_AesGcm256 => Hpke.Core.Crypto.deriveSharedSecretP521(sender.PrivateKey, recipient.PublicKey),
+                _ => Hpke.Core.Crypto.deriveSharedSecret(sender.PrivateKey, recipient.PublicKey)
+            };
             var combined = new byte[shared1.Length + sharedAuth.Length];
             Buffer.BlockCopy(shared1, 0, combined, 0, shared1.Length);
             Buffer.BlockCopy(sharedAuth, 0, combined, shared1.Length, sharedAuth.Length);
-            var prk = Hpke.Core.Crypto.hkdfExtract(null, combined);
-            var key = Hpke.Core.Crypto.hkdfExpand(prk, Array.Empty<byte>(), 32);
-            var nonce = Hpke.Core.Crypto.hkdfExpand(prk, new byte[] { 0 }, 12);
+            var prk = suite switch
+            {
+                HpkeSuite.DhKemP384_HkdfSha384_AesGcm128 or HpkeSuite.DhKemP384_HkdfSha384_AesGcm256 => Hpke.Core.Crypto.hkdfExtractWithHash(new System.Security.Cryptography.HashAlgorithmName("SHA384"), null, combined),
+                HpkeSuite.DhKemP521_HkdfSha512_AesGcm128 or HpkeSuite.DhKemP521_HkdfSha512_AesGcm256 => Hpke.Core.Crypto.hkdfExtractWithHash(new System.Security.Cryptography.HashAlgorithmName("SHA512"), null, combined),
+                _ => Hpke.Core.Crypto.hkdfExtract(null, combined)
+            };
+            var key = suite switch
+            {
+                HpkeSuite.DhKemP384_HkdfSha384_AesGcm128 or HpkeSuite.DhKemP384_HkdfSha384_AesGcm256 => Hpke.Core.Crypto.hkdfExpandWithHash(new System.Security.Cryptography.HashAlgorithmName("SHA384"), prk, Array.Empty<byte>(), 32),
+                HpkeSuite.DhKemP521_HkdfSha512_AesGcm128 or HpkeSuite.DhKemP521_HkdfSha512_AesGcm256 => Hpke.Core.Crypto.hkdfExpandWithHash(new System.Security.Cryptography.HashAlgorithmName("SHA512"), prk, Array.Empty<byte>(), 32),
+                _ => Hpke.Core.Crypto.hkdfExpand(prk, Array.Empty<byte>(), 32)
+            };
+            var nonce = suite switch
+            {
+                HpkeSuite.DhKemP384_HkdfSha384_AesGcm128 or HpkeSuite.DhKemP384_HkdfSha384_AesGcm256 => Hpke.Core.Crypto.hkdfExpandWithHash(new System.Security.Cryptography.HashAlgorithmName("SHA384"), prk, new byte[] { 0 }, 12),
+                HpkeSuite.DhKemP521_HkdfSha512_AesGcm128 or HpkeSuite.DhKemP521_HkdfSha512_AesGcm256 => Hpke.Core.Crypto.hkdfExpandWithHash(new System.Security.Cryptography.HashAlgorithmName("SHA512"), prk, new byte[] { 0 }, 12),
+                _ => Hpke.Core.Crypto.hkdfExpand(prk, new byte[] { 0 }, 12)
+            };
             var ct = Hpke.Core.Crypto.aesGcmEncrypt(key, nonce, Array.Empty<byte>(), plaintext);
             var maybe = Hpke.Core.Crypto.aesGcmDecrypt(key, nonce, Array.Empty<byte>(), ct);
             var pt = maybe == null ? Array.Empty<byte>() : maybe.Value;

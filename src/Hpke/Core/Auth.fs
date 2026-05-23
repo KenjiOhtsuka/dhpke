@@ -1,6 +1,8 @@
 namespace Hpke.Core
 
 module Auth =
+    let private supportedSuiteMessage = "Only the P-256, P-384, or P-521 / HKDF-SHA256, HKDF-SHA384, or HKDF-SHA512 / AES-128-GCM or AES-256-GCM suites are currently implemented"
+
     type private AuthSealState = {
         Suite: HpkeSuite
         RecipientPublicKey: byte[]
@@ -25,7 +27,7 @@ module Auth =
         | Error error -> Error error
         | Ok suite ->
             if not (Suites.isSupportedSuite suite) then
-                Error (InvalidArgument("Suite", "Only the P-256 / HKDF-SHA256 / AES-128-GCM suite is currently implemented"))
+                Error (InvalidArgument("Suite", supportedSuiteMessage))
             else
                 match RequestValidation.requireNotEmptyBytes "RecipientPublicKey" request.RecipientPublicKey with
                 | Error error -> Error error
@@ -56,7 +58,7 @@ module Auth =
         | Error error -> Error error
         | Ok suite ->
             if not (Suites.isSupportedSuite suite) then
-                Error (InvalidArgument("Suite", "Only the P-256 / HKDF-SHA256 / AES-128-GCM suite is currently implemented"))
+                Error (InvalidArgument("Suite", supportedSuiteMessage))
             else
                 match RequestValidation.requireNotEmptyBytes "RecipientPrivateKey" request.RecipientPrivateKey with
                 | Error error -> Error error
@@ -91,13 +93,14 @@ module Auth =
         | Error error -> Error error
         | Ok state ->
             try
-                let (esk, epk) = Crypto.generateEcdhP256KeyPair()
-                let shared1 = Crypto.deriveSharedSecret esk state.RecipientPublicKey
-                let shared2 = Crypto.deriveSharedSecret state.SenderPrivateKey state.RecipientPublicKey
-                let prk = Crypto.hkdfExtract null (Array.concat [shared1; shared2])
-                let key = Crypto.hkdfExpand prk state.Info 32
+                let (esk, epk) = Crypto.generateKeyPairForKem state.Suite.Kem
+                let shared1 = Crypto.deriveSharedSecretForKem state.Suite.Kem esk state.RecipientPublicKey
+                let shared2 = Crypto.deriveSharedSecretForKem state.Suite.Kem state.SenderPrivateKey state.RecipientPublicKey
+                let hashAlgorithm = Suites.kdfHash state.Suite.Kdf
+                let prk = Crypto.hkdfExtractWithHash hashAlgorithm null (Array.concat [shared1; shared2])
+                let key = Crypto.hkdfExpandWithHash hashAlgorithm prk state.Info (Suites.aeadKeySize state.Suite.Aead)
                 let nonceInfo = Array.append state.Info [|0uy|]
-                let nonce = Crypto.hkdfExpand prk nonceInfo 12
+                let nonce = Crypto.hkdfExpandWithHash hashAlgorithm prk nonceInfo 12
                 let ct = Crypto.aesGcmEncrypt key nonce state.Aad state.Plaintext
                 Ok { EncappedKey = epk; Ciphertext = ct }
             with
@@ -108,12 +111,13 @@ module Auth =
         | Error error -> Error error
         | Ok state ->
             try
-                let shared1 = Crypto.deriveSharedSecret state.RecipientPrivateKey state.EncappedKey
-                let shared2 = Crypto.deriveSharedSecret state.RecipientPrivateKey state.SenderPublicKey
-                let prk = Crypto.hkdfExtract null (Array.concat [shared1; shared2])
-                let key = Crypto.hkdfExpand prk state.Info 32
+                let shared1 = Crypto.deriveSharedSecretForKem state.Suite.Kem state.RecipientPrivateKey state.EncappedKey
+                let shared2 = Crypto.deriveSharedSecretForKem state.Suite.Kem state.RecipientPrivateKey state.SenderPublicKey
+                let hashAlgorithm = Suites.kdfHash state.Suite.Kdf
+                let prk = Crypto.hkdfExtractWithHash hashAlgorithm null (Array.concat [shared1; shared2])
+                let key = Crypto.hkdfExpandWithHash hashAlgorithm prk state.Info (Suites.aeadKeySize state.Suite.Aead)
                 let nonceInfo = Array.append state.Info [|0uy|]
-                let nonce = Crypto.hkdfExpand prk nonceInfo 12
+                let nonce = Crypto.hkdfExpandWithHash hashAlgorithm prk nonceInfo 12
                 match Crypto.aesGcmDecrypt key nonce state.Aad state.Ciphertext with
                 | Some pt -> Ok pt
                 | None -> Error (InvalidArgument("Ciphertext", "decryption failed"))

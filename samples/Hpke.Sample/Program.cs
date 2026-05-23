@@ -8,14 +8,25 @@ internal static class Program
 
 	public static void Main()
 	{
-		var suite = HpkeSuite.DhKemP256_HkdfSha256_AesGcm128;
+		var baseSuites = new[]
+		{
+			HpkeSuite.DhKemP256_HkdfSha256_AesGcm128,
+			HpkeSuite.DhKemP384_HkdfSha384_AesGcm128,
+			HpkeSuite.DhKemP521_HkdfSha512_AesGcm256,
+		};
 
-		try { BaseSample.Run(suite); } catch (Exception ex) { Console.WriteLine($"RunBase failed: {ex.Message}"); }
-		try { PskSample.Run(suite); } catch (Exception ex) { Console.WriteLine($"RunPsk failed: {ex.Message}"); }
-		try { AuthSample.Run(suite); } catch (Exception ex) { Console.WriteLine($"RunAuth failed: {ex.Message}"); }
-		try { AuthPskSample.Run(suite); } catch (Exception ex) { Console.WriteLine($"RunAuthPsk failed: {ex.Message}"); }
+		foreach (var suite in baseSuites)
+		{
+			try { BaseSample.Run(suite); } catch (Exception ex) { Console.WriteLine($"RunBase[{suite}] failed: {ex.Message}"); }
+		}
 
-		try { CustomSample.Run(suite); } catch (Exception ex) { Console.WriteLine($"RunCustom failed: {ex.Message}"); }
+		var modeSuite = HpkeSuite.DhKemP256_HkdfSha256_AesGcm128;
+
+		try { PskSample.Run(modeSuite); } catch (Exception ex) { Console.WriteLine($"RunPsk failed: {ex.Message}"); }
+		try { AuthSample.Run(modeSuite); } catch (Exception ex) { Console.WriteLine($"RunAuth failed: {ex.Message}"); }
+		try { AuthPskSample.Run(modeSuite); } catch (Exception ex) { Console.WriteLine($"RunAuthPsk failed: {ex.Message}"); }
+
+		try { CustomSample.Run(modeSuite); } catch (Exception ex) { Console.WriteLine($"RunCustom failed: {ex.Message}"); }
 	}
 
 

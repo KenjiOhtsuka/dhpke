@@ -8,6 +8,11 @@ namespace Hpke.CSharp;
 public enum HpkeSuite
 {
     DhKemP256_HkdfSha256_AesGcm128,
+    DhKemP256_HkdfSha256_AesGcm256,
+    DhKemP384_HkdfSha384_AesGcm128,
+    DhKemP384_HkdfSha384_AesGcm256,
+    DhKemP521_HkdfSha512_AesGcm128,
+    DhKemP521_HkdfSha512_AesGcm256,
 }
 
 public enum HpkeKemAlgorithm
@@ -52,8 +57,17 @@ public sealed class HpkeKeyPair
     public byte[] PublicKey { get; }
 
     public static HpkeKeyPair Generate()
+        => Generate(HpkeKemAlgorithm.DhKemP256HkdfSha256);
+
+    public static HpkeKeyPair Generate(HpkeKemAlgorithm kem)
     {
-        var (privateKey, publicKey) = Crypto.generateEcdhP256KeyPair();
+        var (privateKey, publicKey) = kem switch
+        {
+            HpkeKemAlgorithm.DhKemP256HkdfSha256 => Crypto.generateEcdhP256KeyPair(),
+            HpkeKemAlgorithm.DhKemP384HkdfSha384 => Crypto.generateEcdhP384KeyPair(),
+            HpkeKemAlgorithm.DhKemP521HkdfSha512 => Crypto.generateEcdhP521KeyPair(),
+            _ => throw new NotSupportedException($"Unsupported KEM for key generation: {kem}")
+        };
         return new HpkeKeyPair(privateKey, publicKey);
     }
 
@@ -327,8 +341,49 @@ public sealed class HpkeConfig
             return HpkeSuite.DhKemP256_HkdfSha256_AesGcm128;
         }
 
+        if (kem == HpkeKemAlgorithm.DhKemP256HkdfSha256 && kdf == HpkeKdfAlgorithm.HkdfSha256 && aead == HpkeAeadAlgorithm.Aes256Gcm)
+        {
+            return HpkeSuite.DhKemP256_HkdfSha256_AesGcm256;
+        }
+
+        if (kem == HpkeKemAlgorithm.DhKemP384HkdfSha384 && kdf == HpkeKdfAlgorithm.HkdfSha384 && aead == HpkeAeadAlgorithm.Aes128Gcm)
+        {
+            return HpkeSuite.DhKemP384_HkdfSha384_AesGcm128;
+        }
+
+        if (kem == HpkeKemAlgorithm.DhKemP384HkdfSha384 && kdf == HpkeKdfAlgorithm.HkdfSha384 && aead == HpkeAeadAlgorithm.Aes256Gcm)
+        {
+            return HpkeSuite.DhKemP384_HkdfSha384_AesGcm256;
+        }
+
+        if (kem == HpkeKemAlgorithm.DhKemP521HkdfSha512 && kdf == HpkeKdfAlgorithm.HkdfSha512 && aead == HpkeAeadAlgorithm.Aes128Gcm)
+        {
+            return HpkeSuite.DhKemP521_HkdfSha512_AesGcm128;
+        }
+
+        if (kem == HpkeKemAlgorithm.DhKemP521HkdfSha512 && kdf == HpkeKdfAlgorithm.HkdfSha512 && aead == HpkeAeadAlgorithm.Aes256Gcm)
+        {
+            return HpkeSuite.DhKemP521_HkdfSha512_AesGcm256;
+        }
+
         throw new NotSupportedException($"Unsupported algorithm combination: {kem}/{kdf}/{aead}");
     }
+
+    internal static Tuple<byte[], byte[]> GenerateDefaultKeyPair(HpkeKemAlgorithm kem) => kem switch
+    {
+        HpkeKemAlgorithm.DhKemP256HkdfSha256 => Crypto.generateEcdhP256KeyPair(),
+        HpkeKemAlgorithm.DhKemP384HkdfSha384 => Crypto.generateEcdhP384KeyPair(),
+        HpkeKemAlgorithm.DhKemP521HkdfSha512 => Crypto.generateEcdhP521KeyPair(),
+        _ => throw new NotSupportedException($"Unsupported KEM: {kem}"),
+    };
+
+    internal static byte[] DeriveSharedSecret(HpkeKemAlgorithm kem, byte[] privateKey, byte[] peerPublicKey) => kem switch
+    {
+        HpkeKemAlgorithm.DhKemP256HkdfSha256 => Crypto.deriveSharedSecret(privateKey, peerPublicKey),
+        HpkeKemAlgorithm.DhKemP384HkdfSha384 => Crypto.deriveSharedSecretP384(privateKey, peerPublicKey),
+        HpkeKemAlgorithm.DhKemP521HkdfSha512 => Crypto.deriveSharedSecretP521(privateKey, peerPublicKey),
+        _ => throw new NotSupportedException($"Unsupported KEM: {kem}"),
+    };
 }
 
 public sealed class HpkeSenderContext
@@ -445,9 +500,9 @@ public static class Hpke
                     }
                     else
                     {
-                        var pair = Crypto.generateEcdhP256KeyPair();
+                        var pair = HpkeConfig.GenerateDefaultKeyPair(config.Kem);
                         epk = pair.Item2;
-                        shared1 = Crypto.deriveSharedSecret(pair.Item1, config.RecipientPublicKey!);
+                        shared1 = HpkeConfig.DeriveSharedSecret(config.Kem, pair.Item1, config.RecipientPublicKey!);
                     }
 
                     // KDF
@@ -461,7 +516,7 @@ public static class Hpke
                     if (s.KdfExpand is not null)
                         key = s.KdfExpand(prk, config.Info, s.KeySize);
                     else
-                        key = Crypto.hkdfExpand(prk, config.Info, 32);
+                        key = Crypto.hkdfExpand(prk, config.Info, s.KeySize);
 
                     var nonceInfo = ConcatArrays(config.Info, new byte[] { 0 });
 
@@ -469,7 +524,7 @@ public static class Hpke
                     if (s.KdfExpand is not null)
                         nonce = s.KdfExpand(prk, nonceInfo, s.NonceSize);
                     else
-                        nonce = Crypto.hkdfExpand(prk, nonceInfo, 12);
+                        nonce = Crypto.hkdfExpand(prk, nonceInfo, s.NonceSize);
 
                     byte[] ct;
                     if (s.AeadEncrypt is not null)
@@ -488,9 +543,9 @@ public static class Hpke
                     }
                     else
                     {
-                        var pair = Crypto.generateEcdhP256KeyPair();
+                        var pair = HpkeConfig.GenerateDefaultKeyPair(config.Kem);
                         epk = pair.Item2;
-                        shared1 = Crypto.deriveSharedSecret(pair.Item1, config.RecipientPublicKey!);
+                        shared1 = HpkeConfig.DeriveSharedSecret(config.Kem, pair.Item1, config.RecipientPublicKey!);
                     }
 
                     byte[] prkPsk;
@@ -503,7 +558,7 @@ public static class Hpke
                     if (s.KdfExpand is not null)
                         keyPsk = s.KdfExpand(prkPsk, config.Info, s.KeySize);
                     else
-                        keyPsk = Crypto.hkdfExpand(prkPsk, config.Info, 32);
+                        keyPsk = Crypto.hkdfExpand(prkPsk, config.Info, s.KeySize);
 
                     var nonceInfoPsk = ConcatArrays(config.Info, new byte[] { 0 });
 
@@ -511,7 +566,7 @@ public static class Hpke
                     if (s.KdfExpand is not null)
                         noncePsk = s.KdfExpand(prkPsk, nonceInfoPsk, s.NonceSize);
                     else
-                        noncePsk = Crypto.hkdfExpand(prkPsk, nonceInfoPsk, 12);
+                        noncePsk = Crypto.hkdfExpand(prkPsk, nonceInfoPsk, s.NonceSize);
 
                     byte[] ctPsk;
                     if (s.AeadEncrypt is not null)
@@ -530,12 +585,12 @@ public static class Hpke
                     }
                     else
                     {
-                        var pair = Crypto.generateEcdhP256KeyPair();
+                        var pair = HpkeConfig.GenerateDefaultKeyPair(config.Kem);
                         epk = pair.Item2;
-                        shared1 = Crypto.deriveSharedSecret(pair.Item1, config.RecipientPublicKey!);
+                        shared1 = HpkeConfig.DeriveSharedSecret(config.Kem, pair.Item1, config.RecipientPublicKey!);
                     }
 
-                    var sharedAuth = Crypto.deriveSharedSecret(config.SenderPrivateKey!, config.RecipientPublicKey!);
+                    var sharedAuth = HpkeConfig.DeriveSharedSecret(config.Kem, config.SenderPrivateKey!, config.RecipientPublicKey!);
                     var combined = ConcatArrays(shared1, sharedAuth);
                     byte[] prkAuth;
                     if (s.KdfExtract is not null)
@@ -547,7 +602,7 @@ public static class Hpke
                     if (s.KdfExpand is not null)
                         keyAuth = s.KdfExpand(prkAuth, config.Info, s.KeySize);
                     else
-                        keyAuth = Crypto.hkdfExpand(prkAuth, config.Info, 32);
+                        keyAuth = Crypto.hkdfExpand(prkAuth, config.Info, s.KeySize);
 
                     var nonceInfoAuth = ConcatArrays(config.Info, new byte[] { 0 });
 
@@ -555,7 +610,7 @@ public static class Hpke
                     if (s.KdfExpand is not null)
                         nonceAuth = s.KdfExpand(prkAuth, nonceInfoAuth, s.NonceSize);
                     else
-                        nonceAuth = Crypto.hkdfExpand(prkAuth, nonceInfoAuth, 12);
+                        nonceAuth = Crypto.hkdfExpand(prkAuth, nonceInfoAuth, s.NonceSize);
 
                     byte[] ctAuth;
                     if (s.AeadEncrypt is not null)
@@ -574,12 +629,12 @@ public static class Hpke
                     }
                     else
                     {
-                        var pair = Crypto.generateEcdhP256KeyPair();
+                        var pair = HpkeConfig.GenerateDefaultKeyPair(config.Kem);
                         epk = pair.Item2;
-                        shared1 = Crypto.deriveSharedSecret(pair.Item1, config.RecipientPublicKey!);
+                        shared1 = HpkeConfig.DeriveSharedSecret(config.Kem, pair.Item1, config.RecipientPublicKey!);
                     }
 
-                    var sharedAuth = Crypto.deriveSharedSecret(config.SenderPrivateKey!, config.RecipientPublicKey!);
+                    var sharedAuth = HpkeConfig.DeriveSharedSecret(config.Kem, config.SenderPrivateKey!, config.RecipientPublicKey!);
                     var combined = ConcatArrays(shared1, sharedAuth);
                     byte[] prkAuthPsk;
                     if (s.KdfExtract is not null)
@@ -591,7 +646,7 @@ public static class Hpke
                     if (s.KdfExpand is not null)
                         keyAuthPsk = s.KdfExpand(prkAuthPsk, config.Info, s.KeySize);
                     else
-                        keyAuthPsk = Crypto.hkdfExpand(prkAuthPsk, config.Info, 32);
+                        keyAuthPsk = Crypto.hkdfExpand(prkAuthPsk, config.Info, s.KeySize);
 
                     var nonceInfoAuthPsk = ConcatArrays(config.Info, new byte[] { 0 });
 
@@ -599,7 +654,7 @@ public static class Hpke
                     if (s.KdfExpand is not null)
                         nonceAuthPsk = s.KdfExpand(prkAuthPsk, nonceInfoAuthPsk, s.NonceSize);
                     else
-                        nonceAuthPsk = Crypto.hkdfExpand(prkAuthPsk, nonceInfoAuthPsk, 12);
+                        nonceAuthPsk = Crypto.hkdfExpand(prkAuthPsk, nonceInfoAuthPsk, s.NonceSize);
 
                     byte[] ctAuthPsk;
                     if (s.AeadEncrypt is not null)
@@ -641,7 +696,7 @@ public static class Hpke
                     }
                     else
                     {
-                        shared1 = Crypto.deriveSharedSecret(config.RecipientPrivateKey!, config.EncappedKey!);
+                        shared1 = HpkeConfig.DeriveSharedSecret(config.Kem, config.RecipientPrivateKey!, config.EncappedKey!);
                     }
 
                     byte[] prkOpen;
@@ -678,7 +733,7 @@ public static class Hpke
                 }
                 case HpkeModeKind.Psk:
                 {
-                    byte[] shared1 = s.KemDecapsulate is not null ? s.KemDecapsulate(config.RecipientPrivateKey!, config.EncappedKey!) : Crypto.deriveSharedSecret(config.RecipientPrivateKey!, config.EncappedKey!);
+                    byte[] shared1 = s.KemDecapsulate is not null ? s.KemDecapsulate(config.RecipientPrivateKey!, config.EncappedKey!) : HpkeConfig.DeriveSharedSecret(config.Kem, config.RecipientPrivateKey!, config.EncappedKey!);
 
                     byte[] prkPskOpen;
                     if (s.KdfExtract is not null)
@@ -714,8 +769,8 @@ public static class Hpke
                 }
                 case HpkeModeKind.Auth:
                 {
-                    byte[] shared1 = s.KemDecapsulate is not null ? s.KemDecapsulate(config.RecipientPrivateKey!, config.EncappedKey!) : Crypto.deriveSharedSecret(config.RecipientPrivateKey!, config.EncappedKey!);
-                    var sharedAuth = Crypto.deriveSharedSecret(config.SenderPublicKey!, config.RecipientPrivateKey!);
+                    byte[] shared1 = s.KemDecapsulate is not null ? s.KemDecapsulate(config.RecipientPrivateKey!, config.EncappedKey!) : HpkeConfig.DeriveSharedSecret(config.Kem, config.RecipientPrivateKey!, config.EncappedKey!);
+                    var sharedAuth = HpkeConfig.DeriveSharedSecret(config.Kem, config.SenderPublicKey!, config.RecipientPrivateKey!);
                     var combined = ConcatArrays(shared1, sharedAuth);
 
                     byte[] prkAuthOpen;
@@ -752,8 +807,8 @@ public static class Hpke
                 }
                 case HpkeModeKind.AuthPsk:
                 {
-                    byte[] shared1 = s.KemDecapsulate is not null ? s.KemDecapsulate(config.RecipientPrivateKey!, config.EncappedKey!) : Crypto.deriveSharedSecret(config.RecipientPrivateKey!, config.EncappedKey!);
-                    var sharedAuth = Crypto.deriveSharedSecret(config.SenderPublicKey!, config.RecipientPrivateKey!);
+                    byte[] shared1 = s.KemDecapsulate is not null ? s.KemDecapsulate(config.RecipientPrivateKey!, config.EncappedKey!) : HpkeConfig.DeriveSharedSecret(config.Kem, config.RecipientPrivateKey!, config.EncappedKey!);
+                    var sharedAuth = HpkeConfig.DeriveSharedSecret(config.Kem, config.SenderPublicKey!, config.RecipientPrivateKey!);
                     var combined = ConcatArrays(shared1, sharedAuth);
 
                     byte[] prkAuthPskOpen;
@@ -854,6 +909,26 @@ public static class Hpke
             global::Hpke.Core.KemAlgorithm.DhKemP256HkdfSha256,
             global::Hpke.Core.KdfAlgorithm.HkdfSha256,
             global::Hpke.Core.AeadAlgorithm.Aes128Gcm),
+        HpkeSuite.DhKemP256_HkdfSha256_AesGcm256 => new global::Hpke.Core.HpkeSuite(
+            global::Hpke.Core.KemAlgorithm.DhKemP256HkdfSha256,
+            global::Hpke.Core.KdfAlgorithm.HkdfSha256,
+            global::Hpke.Core.AeadAlgorithm.Aes256Gcm),
+        HpkeSuite.DhKemP384_HkdfSha384_AesGcm128 => new global::Hpke.Core.HpkeSuite(
+            global::Hpke.Core.KemAlgorithm.DhKemP384HkdfSha384,
+            global::Hpke.Core.KdfAlgorithm.HkdfSha384,
+            global::Hpke.Core.AeadAlgorithm.Aes128Gcm),
+        HpkeSuite.DhKemP384_HkdfSha384_AesGcm256 => new global::Hpke.Core.HpkeSuite(
+            global::Hpke.Core.KemAlgorithm.DhKemP384HkdfSha384,
+            global::Hpke.Core.KdfAlgorithm.HkdfSha384,
+            global::Hpke.Core.AeadAlgorithm.Aes256Gcm),
+        HpkeSuite.DhKemP521_HkdfSha512_AesGcm128 => new global::Hpke.Core.HpkeSuite(
+            global::Hpke.Core.KemAlgorithm.DhKemP521HkdfSha512,
+            global::Hpke.Core.KdfAlgorithm.HkdfSha512,
+            global::Hpke.Core.AeadAlgorithm.Aes128Gcm),
+        HpkeSuite.DhKemP521_HkdfSha512_AesGcm256 => new global::Hpke.Core.HpkeSuite(
+            global::Hpke.Core.KemAlgorithm.DhKemP521HkdfSha512,
+            global::Hpke.Core.KdfAlgorithm.HkdfSha512,
+            global::Hpke.Core.AeadAlgorithm.Aes256Gcm),
         _ => throw new NotSupportedException($"Unsupported suite: {suite}"),
     };
 

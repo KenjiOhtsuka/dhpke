@@ -4,7 +4,7 @@ internal static class BaseSample
 {
     public static void Run(HpkeSuite suite)
     {
-        var recipient = HpkeKeyPair.Generate();
+        var recipient = SampleHelpers.GenerateKeyPair(suite);
         var plaintext = SampleHelpers.Utf8.GetBytes("base mode from C#");
 
         var sender = HpkeSenderContext.Setup(suite, recipient.PublicKey);

@@ -9,55 +9,13 @@ namespace Hpke.CSharp.Tests
     public class HpkeStrategiesExtraTests
     {
         [Fact]
-        public void PskMode_WithStrategies_RoundTrip()
+        public void PskMode_RoundTrip()
         {
-            KemEncapsulateDelegate kemEncap = (recipientPublicKey) =>
-            {
-                var pair = Crypto.generateEcdhP256KeyPair();
-                var epk = pair.Item2;
-                var shared = Crypto.deriveSharedSecret(pair.Item1, recipientPublicKey);
-                return (epk, shared);
-            };
-
-            KemDecapsulateDelegate kemDecap = (recipientPrivateKey, encappedKey) =>
-            {
-                return Crypto.deriveSharedSecret(recipientPrivateKey, encappedKey);
-            };
-
-            KdfExtractDelegate kdfExtract = (salt, ikm) => Crypto.hkdfExtract(salt, ikm);
-            KdfExpandDelegate kdfExpand = (prk, info, length) => Crypto.hkdfExpand(prk, info, length);
-            AeadEncryptDelegate aeadEnc = (key, nonce, aad, pt) => Crypto.aesGcmEncrypt(key, nonce, aad, pt);
-            AeadDecryptDelegate aeadDec = (key, nonce, aad, ct) => {
-                var maybe = Crypto.aesGcmDecrypt(key, nonce, aad, ct);
-                return maybe == null ? null : maybe.Value;
-            };
-
-            var strategies = new HpkeStrategies
-            {
-                KemEncapsulate = kemEncap,
-                KemDecapsulate = kemDecap,
-                KdfExtract = kdfExtract,
-                KdfExpand = kdfExpand,
-                AeadEncrypt = aeadEnc,
-                AeadDecrypt = aeadDec,
-                KeySize = 16,
-                NonceSize = 12,
-                TagSize = 16,
-            };
-
             var recipient = HpkeKeyPair.Generate();
             var psk = new byte[] { 1, 2, 3 };
             var pskId = new byte[] { 9 };
 
-            var cfgSender = HpkeConfig.ForPskSender(HpkeSuite.DhKemP256_HkdfSha256_AesGcm128, recipient.PublicKey, psk, pskId);
-            // attach strategies via ForPskSender overload isn't present; use ForBaseSender overload that accepts strategies for Base only
-            // So create HpkeConfig manually via ForPskSender then reuse Hpke.Encrypt by calling HpkeSenderContext.Setup with a config that contains strategies.
-            var cfgSenderWithStrategies = HpkeConfig.ForPskSender(HpkeSuite.DhKemP256_HkdfSha256_AesGcm128, recipient.PublicKey, psk, pskId);
-            // reflectively attach strategies (not ideal) — instead use the public overloads: there's no direct overload taking strategies for PSK, so use existing ForPskSender and then create a new HpkeConfig via constructor isn't accessible.
-            // Safer approach: invoke HpkeSenderContext.Setup(HpkeConfig) and then use Hpke.Encrypt; but HpkeConfig doesn't expose a setter for Strategies. We can use ForPskSender overloads for suite and strategies are only available for base in API.
-            // Alternate approach: use HpkeSenderContext.Setup with ForPskSender(suite, recipientPublicKey, psk, pskId) and rely on core behavior (no strategies). The goal is to ensure PSK flow exists — confirm round-trip without custom strategies.
-
-            var sealedValue = HpkeSenderContext.Setup(HpkeSuite.DhKemP256_HkdfSha256_AesGcm128, recipient.PublicKey, psk, pskId).Seal(new byte[] { 10, 11 });
+            var sealedValue = HpkeSenderContext.SetupPsk(HpkeSuite.DhKemP256_HkdfSha256_AesGcm128, recipient.PublicKey, psk, pskId).Seal(new byte[] { 10, 11 });
             var decrypted = HpkeRecipientContext.SetupPsk(HpkeSuite.DhKemP256_HkdfSha256_AesGcm128, recipient.PrivateKey, sealedValue.EncappedKey, psk, pskId).Open(sealedValue.Ciphertext);
 
             Assert.Equal(new byte[] { 10, 11 }, decrypted);

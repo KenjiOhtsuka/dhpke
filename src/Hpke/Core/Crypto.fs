@@ -3,60 +3,149 @@ namespace Hpke.Core
 open System
 open System.Security.Cryptography
 
+namespace Hpke.Core
+
+open System
+open System.Security.Cryptography
+
 module Crypto =
 
-    let generateEcdhP256KeyPair () : byte[] * byte[] =
-        use e = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256)
+    let private createP256Ecdh () =
+        ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256)
+
+    let private createP384Ecdh () =
+        ECDiffieHellman.Create(ECCurve.NamedCurves.nistP384)
+
+    let private createP521Ecdh () =
+        ECDiffieHellman.Create(ECCurve.NamedCurves.nistP521)
+
+    let private getKemParameters = function
+        | DhKemP256HkdfSha256 -> createP256Ecdh, HashAlgorithmName("SHA256")
+        | DhKemP384HkdfSha384 -> createP384Ecdh, HashAlgorithmName("SHA384")
+        | DhKemP521HkdfSha512 -> createP521Ecdh, HashAlgorithmName("SHA512")
+        | CustomKem name -> invalidArg "kem" (sprintf "Unsupported KEM %s; provide a custom strategy instead" name)
+
+    let private generateKeyPairUsing (createEcdh: unit -> ECDiffieHellman) : byte[] * byte[] =
+        use e = createEcdh()
         let priv = e.ExportPkcs8PrivateKey()
         let pub = e.PublicKey.ExportSubjectPublicKeyInfo()
         (priv, pub)
 
-    let publicKeyFromPrivatePkcs8 (privatePkcs8: byte[]) : byte[] =
-        use priv = ECDiffieHellman.Create()
+    let private publicKeyFromPrivatePkcs8Using (createEcdh: unit -> ECDiffieHellman) (privatePkcs8: byte[]) : byte[] =
+        use priv = createEcdh()
         let mutable read = 0
         priv.ImportPkcs8PrivateKey(ReadOnlySpan privatePkcs8, &read)
         priv.PublicKey.ExportSubjectPublicKeyInfo()
 
-    let deriveSharedSecret (privatePkcs8: byte[]) (peerPublicSpki: byte[]) : byte[] =
-        use priv = ECDiffieHellman.Create()
+    let private deriveSharedSecretUsing (createEcdh: unit -> ECDiffieHellman) (hashAlgorithm: HashAlgorithmName) (privatePkcs8: byte[]) (peerPublicSpki: byte[]) : byte[] =
+        use priv = createEcdh()
         let mutable read = 0
         priv.ImportPkcs8PrivateKey(ReadOnlySpan privatePkcs8, &read)
-        use peer = ECDiffieHellman.Create()
+        use peer = createEcdh()
         let mutable read2 = 0
         peer.ImportSubjectPublicKeyInfo(ReadOnlySpan peerPublicSpki, &read2)
-        let secret = priv.DeriveKeyFromHash(peer.PublicKey, HashAlgorithmName.SHA256)
-        secret
+        priv.DeriveKeyFromHash(peer.PublicKey, hashAlgorithm)
+
+    let private encapsulateWithEphemeralPrivateUsing (createEcdh: unit -> ECDiffieHellman) (hashAlgorithm: HashAlgorithmName) (eskPkcs8: byte[]) (recipientPublicSpki: byte[]) : byte[] * byte[] =
+        let epk = publicKeyFromPrivatePkcs8Using createEcdh eskPkcs8
+        let shared = deriveSharedSecretUsing createEcdh hashAlgorithm eskPkcs8 recipientPublicSpki
+        (epk, shared)
+
+    let generateKeyPairForKem kem =
+        let createEcdh, _ = getKemParameters kem
+        generateKeyPairUsing createEcdh
+
+    let publicKeyFromPrivatePkcs8ForKem kem privatePkcs8 =
+        let createEcdh, _ = getKemParameters kem
+        publicKeyFromPrivatePkcs8Using createEcdh privatePkcs8
+
+    let deriveSharedSecretForKem kem privatePkcs8 peerPublicSpki =
+        let createEcdh, hashAlgorithm = getKemParameters kem
+        deriveSharedSecretUsing createEcdh hashAlgorithm privatePkcs8 peerPublicSpki
+
+    let encapsulateWithEphemeralPrivateForKem kem eskPkcs8 recipientPublicSpki =
+        let createEcdh, hashAlgorithm = getKemParameters kem
+        encapsulateWithEphemeralPrivateUsing createEcdh hashAlgorithm eskPkcs8 recipientPublicSpki
+
+    let generateEcdhP256KeyPair () : byte[] * byte[] =
+        generateKeyPairUsing createP256Ecdh
+
+    let generateEcdhP384KeyPair () : byte[] * byte[] =
+        generateKeyPairUsing createP384Ecdh
+
+    let generateEcdhP521KeyPair () : byte[] * byte[] =
+        generateKeyPairUsing createP521Ecdh
+
+    let publicKeyFromPrivatePkcs8 (privatePkcs8: byte[]) : byte[] =
+        publicKeyFromPrivatePkcs8Using createP256Ecdh privatePkcs8
+
+    let publicKeyFromPrivatePkcs8P384 (privatePkcs8: byte[]) : byte[] =
+        publicKeyFromPrivatePkcs8Using createP384Ecdh privatePkcs8
+
+    let publicKeyFromPrivatePkcs8P521 (privatePkcs8: byte[]) : byte[] =
+        publicKeyFromPrivatePkcs8Using createP521Ecdh privatePkcs8
+
+    let deriveSharedSecret (privatePkcs8: byte[]) (peerPublicSpki: byte[]) : byte[] =
+        deriveSharedSecretUsing createP256Ecdh HashAlgorithmName.SHA256 privatePkcs8 peerPublicSpki
+
+    let deriveSharedSecretP384 (privatePkcs8: byte[]) (peerPublicSpki: byte[]) : byte[] =
+        deriveSharedSecretUsing createP384Ecdh HashAlgorithmName.SHA384 privatePkcs8 peerPublicSpki
+
+    let deriveSharedSecretP521 (privatePkcs8: byte[]) (peerPublicSpki: byte[]) : byte[] =
+        deriveSharedSecretUsing createP521Ecdh HashAlgorithmName.SHA512 privatePkcs8 peerPublicSpki
 
     /// Encapsulate using a provided ephemeral private key (PKCS#8) and recipient public SPKI.
     /// Returns (epk_spki, shared_secret)
     let encapsulateWithEphemeralPrivate (eskPkcs8: byte[]) (recipientPublicSpki: byte[]) : byte[] * byte[] =
-        let epk = publicKeyFromPrivatePkcs8 eskPkcs8
-        let shared = deriveSharedSecret eskPkcs8 recipientPublicSpki
-        (epk, shared)
+        encapsulateWithEphemeralPrivateUsing createP256Ecdh HashAlgorithmName.SHA256 eskPkcs8 recipientPublicSpki
 
-    let hkdfExtract (salt: byte[]) (ikm: byte[]) : byte[] =
-        let actualSalt = if isNull salt then Array.zeroCreate 32 else salt
-        use hmac = new HMACSHA256(actualSalt)
+    let encapsulateWithEphemeralPrivateP384 (eskPkcs8: byte[]) (recipientPublicSpki: byte[]) : byte[] * byte[] =
+        encapsulateWithEphemeralPrivateUsing createP384Ecdh HashAlgorithmName.SHA384 eskPkcs8 recipientPublicSpki
+
+    let encapsulateWithEphemeralPrivateP521 (eskPkcs8: byte[]) (recipientPublicSpki: byte[]) : byte[] * byte[] =
+        encapsulateWithEphemeralPrivateUsing createP521Ecdh HashAlgorithmName.SHA512 eskPkcs8 recipientPublicSpki
+
+    let private hashLength = function
+        | h when h = HashAlgorithmName("SHA256") -> 32
+        | h when h = HashAlgorithmName("SHA384") -> 48
+        | h when h = HashAlgorithmName("SHA512") -> 64
+        | h -> invalidArg "hashAlgorithm" (sprintf "Unsupported hash algorithm %A" h)
+
+    let private createHmac = function
+        | h when h = HashAlgorithmName("SHA256") -> fun (key: byte[]) -> new HMACSHA256(key) :> HMAC
+        | h when h = HashAlgorithmName("SHA384") -> fun (key: byte[]) -> new HMACSHA384(key) :> HMAC
+        | h when h = HashAlgorithmName("SHA512") -> fun (key: byte[]) -> new HMACSHA512(key) :> HMAC
+        | h -> invalidArg "hashAlgorithm" (sprintf "Unsupported hash algorithm %A" h)
+
+    let hkdfExtractWithHash hashAlgorithm (salt: byte[]) (ikm: byte[]) : byte[] =
+        let actualSalt = if isNull salt then Array.zeroCreate (hashLength hashAlgorithm) else salt
+        use hmac = createHmac hashAlgorithm actualSalt
         hmac.ComputeHash(ikm)
 
-    let hkdfExpand (prk: byte[]) (info: byte[]) (length: int) : byte[] =
-        let hashLen = 32
+    let hkdfExpandWithHash hashAlgorithm (prk: byte[]) (info: byte[]) (length: int) : byte[] =
+        let hashLen = hashLength hashAlgorithm
         let n = (length + hashLen - 1) / hashLen
         let mutable t = Array.empty<byte>
         let okm = Array.zeroCreate<byte> (n * hashLen)
-        use hmac = new HMACSHA256(prk)
+        use hmac = createHmac hashAlgorithm prk
         for i in 1..n do
-            let data = Array.concat [t; info; [| byte i |]]
+            let data = Array.concat [ t; info; [| byte i |] ]
             t <- hmac.ComputeHash(data)
-            Array.Copy(t, 0, okm, (i-1)*hashLen, hashLen)
+            Array.Copy(t, 0, okm, (i - 1) * hashLen, hashLen)
         okm.[0..length-1]
+
+    let hkdfExtract (salt: byte[]) (ikm: byte[]) : byte[] =
+        hkdfExtractWithHash (HashAlgorithmName("SHA256")) salt ikm
+
+    let hkdfExpand (prk: byte[]) (info: byte[]) (length: int) : byte[] =
+        hkdfExpandWithHash (HashAlgorithmName("SHA256")) prk info length
 
     let aesGcmEncrypt (key: byte[]) (nonce: byte[]) (aad: byte[]) (pt: byte[]) : byte[] =
         use aes = new AesGcm(key, 16)
         let ct = Array.zeroCreate<byte> pt.Length
         let tag = Array.zeroCreate<byte> 16
         aes.Encrypt(nonce, pt, ct, tag, aad)
-        Array.concat [ct; tag]
+        Array.concat [ ct; tag ]
 
     let aesGcmDecrypt (key: byte[]) (nonce: byte[]) (aad: byte[]) (ctAndTag: byte[]) : byte[] option =
         if ctAndTag.Length < 16 then None else
