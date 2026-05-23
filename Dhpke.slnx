@@ -8,6 +8,7 @@
     <Project Path="src/Hpke/Hpke.fsproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Hpke.CSharp.Tests/Hpke.CSharp.Tests.csproj" />
     <Project Path="tests/Hpke.Tests/Hpke.Tests.fsproj" />
   </Folder>
 </Solution>

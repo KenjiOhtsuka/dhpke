@@ -5,6 +5,16 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+    <!-- Packaging metadata -->
+    <PackageId>DhPke.Hpke.CSharp</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>dhpke</Authors>
+    <Company>dhpke</Company>
+    <Description>HPKE .NET facade (C#) over F# core implementation. Supports Base/PSK/Auth/AuthPSK modes with pluggable strategies.</Description>
+    <PackageTags>hpke;cryptography;hpke-dotnet;hpke-csharp</PackageTags>
+    <RepositoryUrl>https://github.com/your/repo</RepositoryUrl>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>

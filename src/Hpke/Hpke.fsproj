@@ -3,6 +3,16 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- Packaging metadata for core F# library -->
+    <PackageId>DhPke.Hpke</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>dhpke</Authors>
+    <Company>dhpke</Company>
+    <Description>HPKE core primitives and mode implementations (F#). Do not reference this package directly from untrusted code.</Description>
+    <PackageTags>hpke;cryptography;hpke-fsharp;hpke-core</PackageTags>
+    <RepositoryUrl>https://github.com/your/repo</RepositoryUrl>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>

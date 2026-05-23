@@ -27,7 +27,7 @@ let ``rfc9180 official vector fixture matches expected outputs`` () =
         for i in 1..n do
             seqBytes.[n - i] <- byte (v &&& 0xFF)
             v <- v >>> 8
-        Array.init n (fun i -> byte (baseNonce.[i] ^ seqBytes.[i]))
+        Array.init n (fun i -> byte (baseNonce.[i] ^^^ seqBytes.[i]))
 
     let get (e: JsonElement) (name: string) =
         let mutable v = Unchecked.defaultof<JsonElement>
@@ -39,11 +39,11 @@ let ``rfc9180 official vector fixture matches expected outputs`` () =
     // HKDF-Expand-Label per RFC-style: HkdfLabel = length(2) || labelLen(1) || label || ctxLen(1) || context
     let hkdfExpandLabel (prk: byte[]) (label: string) (context: byte[]) (length: int) : byte[] =
         let prefix = "HPKE-v1 "
-        let lblBytes = System.Text.Encoding.ASCII.GetBytes(prefix + label)
+        let lblBytes = System.Text.Encoding.ASCII.GetBytes(sprintf "%s%s" prefix label)
         let lenBytes = [| byte (length >>> 8); byte (length &&& 0xFF) |]
         let lblLen = [| byte lblBytes.Length |]
         let ctxLen = [| byte context.Length |]
-        let info = Array.concat [lenBytes; lblLen; lblBytes; ctxLen; context]
+        let info = Array.concat [| lenBytes; lblLen; lblBytes; ctxLen; context |]
         Hpke.Core.Crypto.hkdfExpand prk info length
 
     for element in doc.RootElement.EnumerateArray() do
@@ -52,7 +52,7 @@ let ``rfc9180 official vector fixture matches expected outputs`` () =
             let name = nameEl.GetString()
             // If the vector contains explicit ephemeral private key, encapped key, etc. we can recompute
             // and validate more fields. Use Crypto helpers to derive public from private and derive shared secret.
-            match get element "esk_private", get element "recipient_public", get element "recipient_private" with
+            match (get element "esk_private", get element "recipient_public", get element "recipient_private") with
             | Some eskPrivEl, Some recipPubEl, _ ->
                 // We have esk private and recipient public; recompute encapped_key and shared secret
                 let esk = hex (eskPrivEl.GetString())
@@ -82,13 +82,17 @@ let ``rfc9180 official vector fixture matches expected outputs`` () =
                         match get element "sequences" with
                         | Some seqsEl ->
                             for sElem in seqsEl.EnumerateArray() do
-                                let seq = if sElem.TryGetProperty("seq", &_) then sElem.GetProperty("seq").GetInt32() else 0
-                                let pt = if sElem.TryGetProperty("pt", &_) then hex (sElem.GetProperty("pt").GetString()) else Array.empty<byte>
-                                let aad = if sElem.TryGetProperty("aad", &_) then hex (sElem.GetProperty("aad").GetString()) else Array.empty<byte>
-                                let ct = if sElem.TryGetProperty("ct", &_) then hex (sElem.GetProperty("ct").GetString()) else Array.empty<byte>
+                                let mutable tmpSeq = Unchecked.defaultof<JsonElement>
+                                let seq = if sElem.TryGetProperty("seq", &tmpSeq) then tmpSeq.GetInt32() else 0
+                                let mutable tmpPt = Unchecked.defaultof<JsonElement>
+                                let pt = if sElem.TryGetProperty("pt", &tmpPt) then hex (tmpPt.GetString()) else Array.empty<byte>
+                                let mutable tmpAad = Unchecked.defaultof<JsonElement>
+                                let aad = if sElem.TryGetProperty("aad", &tmpAad) then hex (tmpAad.GetString()) else Array.empty<byte>
+                                let mutable tmpCt = Unchecked.defaultof<JsonElement>
+                                let ct = if sElem.TryGetProperty("ct", &tmpCt) then hex (tmpCt.GetString()) else Array.empty<byte>
                                 let nonce = xorNonce baseNonce seq
                                 // decrypt and compare
-                                match Hpke.Core.Crypto.aesGcmDecrypt(actualKey, nonce, aad, ct) with
+                                match Hpke.Core.Crypto.aesGcmDecrypt actualKey nonce aad ct with
                                 | Some clear -> Assert.Equal<byte[]>(pt, clear)
                                 | None -> Assert.True(false, sprintf "Decryption failed for vector %s seq %d" name seq)
                         | None -> ()
@@ -111,11 +115,11 @@ let ``rfc9180 official vector fixture matches expected outputs`` () =
                     | Some exportsEl ->
                         for ex in exportsEl.EnumerateArray() do
                             let mutable tmp = Unchecked.defaultof<JsonElement>
-                            let ctx = if ex.TryGetProperty("exporter_context", &tmp) then hex (ex.GetProperty("exporter_context").GetString()) else Array.empty<byte>
+                            let ctx = if ex.TryGetProperty("exporter_context", &tmp) then hex (tmp.GetString()) else Array.empty<byte>
                             let mutable tmp2 = Unchecked.defaultof<JsonElement>
-                            let l = if ex.TryGetProperty("L", &tmp2) then ex.GetProperty("L").GetInt32() else 0
+                            let l = if ex.TryGetProperty("L", &tmp2) then tmp2.GetInt32() else 0
                             let mutable tmp3 = Unchecked.defaultof<JsonElement>
-                            let expected = if ex.TryGetProperty("exported_value", &tmp3) then hex (ex.GetProperty("exported_value").GetString()) else Array.empty<byte>
+                            let expected = if ex.TryGetProperty("exported_value", &tmp3) then hex (tmp3.GetString()) else Array.empty<byte>
                             // Strict HKDF-Expand-Label construction (no fallback)
                             let labeled = hkdfExpandLabel expSec "exporter" ctx expected.Length
                             Assert.Equal<byte[]>(expected, labeled)
