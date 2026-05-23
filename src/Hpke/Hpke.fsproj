@@ -6,7 +6,7 @@
 
     <!-- Packaging metadata for core F# library -->
     <PackageId>Dhpke.Hpke</PackageId>
-    <Version>0.1.3</Version>
+    <Version>0.1.4</Version>
     <Authors>Kenji Otsuka</Authors>
     <!-- <Company>dhpke</Company> -->
     <Description>HPKE core primitives and mode implementations (F#). Do not reference this package directly from untrusted code.</Description>

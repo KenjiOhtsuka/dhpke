@@ -8,7 +8,7 @@
 
     <!-- Packaging metadata -->
     <PackageId>Dhpke.Hpke.CSharp</PackageId>
-    <Version>0.1.3</Version>
+    <Version>0.1.4</Version>
     <Authors>Kenji Otsuka</Authors>
     <!-- <Company>dhpke</Company> -->
     <Description>HPKE .NET facade (C#) over F# core implementation. Supports Base/PSK/Auth/AuthPSK modes with pluggable strategies.</Description>
