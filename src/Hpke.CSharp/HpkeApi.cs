@@ -9,6 +9,8 @@ public enum HpkeSuite
 {
     DhKemP256_HkdfSha256_AesGcm128,
     DhKemP256_HkdfSha256_AesGcm256,
+    DhKemX25519_HkdfSha256_AesGcm128,
+    DhKemX25519_HkdfSha256_AesGcm256,
     DhKemP384_HkdfSha384_AesGcm128,
     DhKemP384_HkdfSha384_AesGcm256,
     DhKemP521_HkdfSha512_AesGcm128,
@@ -18,6 +20,7 @@ public enum HpkeSuite
 public enum HpkeKemAlgorithm
 {
     DhKemP256HkdfSha256,
+    DhKemX25519HkdfSha256,
     DhKemP384HkdfSha384,
     DhKemP521HkdfSha512,
 }
@@ -64,6 +67,7 @@ public sealed class HpkeKeyPair
         var (privateKey, publicKey) = kem switch
         {
             HpkeKemAlgorithm.DhKemP256HkdfSha256 => Crypto.generateEcdhP256KeyPair(),
+            HpkeKemAlgorithm.DhKemX25519HkdfSha256 => Crypto.generateEcdhX25519KeyPair(),
             HpkeKemAlgorithm.DhKemP384HkdfSha384 => Crypto.generateEcdhP384KeyPair(),
             HpkeKemAlgorithm.DhKemP521HkdfSha512 => Crypto.generateEcdhP521KeyPair(),
             _ => throw new NotSupportedException($"Unsupported KEM for key generation: {kem}")
@@ -346,6 +350,16 @@ public sealed class HpkeConfig
             return HpkeSuite.DhKemP256_HkdfSha256_AesGcm256;
         }
 
+        if (kem == HpkeKemAlgorithm.DhKemX25519HkdfSha256 && kdf == HpkeKdfAlgorithm.HkdfSha256 && aead == HpkeAeadAlgorithm.Aes128Gcm)
+        {
+            return HpkeSuite.DhKemX25519_HkdfSha256_AesGcm128;
+        }
+
+        if (kem == HpkeKemAlgorithm.DhKemX25519HkdfSha256 && kdf == HpkeKdfAlgorithm.HkdfSha256 && aead == HpkeAeadAlgorithm.Aes256Gcm)
+        {
+            return HpkeSuite.DhKemX25519_HkdfSha256_AesGcm256;
+        }
+
         if (kem == HpkeKemAlgorithm.DhKemP384HkdfSha384 && kdf == HpkeKdfAlgorithm.HkdfSha384 && aead == HpkeAeadAlgorithm.Aes128Gcm)
         {
             return HpkeSuite.DhKemP384_HkdfSha384_AesGcm128;
@@ -372,6 +386,7 @@ public sealed class HpkeConfig
     internal static Tuple<byte[], byte[]> GenerateDefaultKeyPair(HpkeKemAlgorithm kem) => kem switch
     {
         HpkeKemAlgorithm.DhKemP256HkdfSha256 => Crypto.generateEcdhP256KeyPair(),
+        HpkeKemAlgorithm.DhKemX25519HkdfSha256 => Crypto.generateEcdhX25519KeyPair(),
         HpkeKemAlgorithm.DhKemP384HkdfSha384 => Crypto.generateEcdhP384KeyPair(),
         HpkeKemAlgorithm.DhKemP521HkdfSha512 => Crypto.generateEcdhP521KeyPair(),
         _ => throw new NotSupportedException($"Unsupported KEM: {kem}"),
@@ -380,6 +395,7 @@ public sealed class HpkeConfig
     internal static byte[] DeriveSharedSecret(HpkeKemAlgorithm kem, byte[] privateKey, byte[] peerPublicKey) => kem switch
     {
         HpkeKemAlgorithm.DhKemP256HkdfSha256 => Crypto.deriveSharedSecret(privateKey, peerPublicKey),
+        HpkeKemAlgorithm.DhKemX25519HkdfSha256 => Crypto.deriveSharedSecretX25519(privateKey, peerPublicKey),
         HpkeKemAlgorithm.DhKemP384HkdfSha384 => Crypto.deriveSharedSecretP384(privateKey, peerPublicKey),
         HpkeKemAlgorithm.DhKemP521HkdfSha512 => Crypto.deriveSharedSecretP521(privateKey, peerPublicKey),
         _ => throw new NotSupportedException($"Unsupported KEM: {kem}"),
@@ -911,6 +927,14 @@ public static class Hpke
             global::Hpke.Core.AeadAlgorithm.Aes128Gcm),
         HpkeSuite.DhKemP256_HkdfSha256_AesGcm256 => new global::Hpke.Core.HpkeSuite(
             global::Hpke.Core.KemAlgorithm.DhKemP256HkdfSha256,
+            global::Hpke.Core.KdfAlgorithm.HkdfSha256,
+            global::Hpke.Core.AeadAlgorithm.Aes256Gcm),
+        HpkeSuite.DhKemX25519_HkdfSha256_AesGcm128 => new global::Hpke.Core.HpkeSuite(
+            global::Hpke.Core.KemAlgorithm.DhKemX25519HkdfSha256,
+            global::Hpke.Core.KdfAlgorithm.HkdfSha256,
+            global::Hpke.Core.AeadAlgorithm.Aes128Gcm),
+        HpkeSuite.DhKemX25519_HkdfSha256_AesGcm256 => new global::Hpke.Core.HpkeSuite(
+            global::Hpke.Core.KemAlgorithm.DhKemX25519HkdfSha256,
             global::Hpke.Core.KdfAlgorithm.HkdfSha256,
             global::Hpke.Core.AeadAlgorithm.Aes256Gcm),
         HpkeSuite.DhKemP384_HkdfSha384_AesGcm128 => new global::Hpke.Core.HpkeSuite(

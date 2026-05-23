@@ -177,3 +177,36 @@ let ``base seal and open roundtrip with p521 suite`` () =
         | Error e -> failwithf "Open failed: %A" e
         | Ok pt -> Assert.Equal<byte[]>([| 21uy; 22uy; 23uy; 24uy |], pt)
 
+[<Fact>]
+let ``base seal and open roundtrip with x25519 suite`` () =
+    let suite = {
+        Kem = DhKemX25519HkdfSha256
+        Kdf = HkdfSha256
+        Aead = Aes128Gcm
+    }
+
+    let (recipientSk, recipientPk) = Hpke.Core.Crypto.generateEcdhX25519KeyPair()
+
+    let sealReq = {
+        Suite = suite
+        RecipientPublicKey = recipientPk
+        Info = [||]
+        Aad = [||]
+        Plaintext = [| 31uy; 32uy; 33uy |]
+    }
+
+    match Base.Seal sealReq with
+    | Error e -> failwithf "Base.Seal failed: %A" e
+    | Ok res ->
+        let openReq = {
+            Suite = suite
+            RecipientPrivateKey = recipientSk
+            EncappedKey = res.EncappedKey
+            Info = [||]
+            Aad = [||]
+            Ciphertext = res.Ciphertext
+        }
+
+        match Base.Open openReq with
+        | Error e -> failwithf "Open failed: %A" e
+        | Ok pt -> Assert.Equal<byte[]>([| 31uy; 32uy; 33uy |], pt)

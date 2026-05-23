@@ -23,6 +23,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="Core\Types.fs" />
     <Compile Include="Core\Crypto.fs" />
     <Compile Include="Core\Errors.fs" />

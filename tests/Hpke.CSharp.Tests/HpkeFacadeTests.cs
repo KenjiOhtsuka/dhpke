@@ -58,5 +58,18 @@ namespace Hpke.CSharp.Tests
             Assert.Equal(plaintext, decrypted);
         }
 
+        [Fact]
+        public void SenderRecipient_RoundTrip_BaseMode_X25519Suite()
+        {
+            var recipient = HpkeKeyPair.Generate(HpkeKemAlgorithm.DhKemX25519HkdfSha256);
+            var plaintext = new byte[] { 31, 32, 33 };
+
+            var sealedValue = HpkeSenderContext.Setup(HpkeSuite.DhKemX25519_HkdfSha256_AesGcm128, recipient.PublicKey).Seal(plaintext);
+
+            var decrypted = HpkeRecipientContext.Setup(HpkeSuite.DhKemX25519_HkdfSha256_AesGcm128, recipient.PrivateKey, sealedValue.EncappedKey).Open(sealedValue.Ciphertext);
+
+            Assert.Equal(plaintext, decrypted);
+        }
+
     }
 }

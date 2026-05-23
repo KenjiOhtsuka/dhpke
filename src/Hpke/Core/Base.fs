@@ -1,7 +1,7 @@
 namespace Hpke.Core
 
 module Base =
-    let private supportedSuiteMessage = "Only the P-256, P-384, or P-521 / HKDF-SHA256, HKDF-SHA384, or HKDF-SHA512 / AES-128-GCM or AES-256-GCM suites are currently implemented"
+    let private supportedSuiteMessage = "Only the P-256, X25519, P-384, or P-521 / HKDF-SHA256, HKDF-SHA384, or HKDF-SHA512 / AES-128-GCM or AES-256-GCM suites are currently implemented"
 
     let private validateSealRequest (request: BaseSealRequest) =
         match RequestValidation.requireNotNull "Suite" request.Suite with

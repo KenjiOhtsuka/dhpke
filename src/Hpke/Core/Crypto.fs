@@ -2,11 +2,12 @@ namespace Hpke.Core
 
 open System
 open System.Security.Cryptography
-
-namespace Hpke.Core
-
-open System
-open System.Security.Cryptography
+open Org.BouncyCastle.Crypto.Agreement
+open Org.BouncyCastle.Crypto.Generators
+open Org.BouncyCastle.Crypto.Parameters
+open Org.BouncyCastle.Pkcs
+open Org.BouncyCastle.Security
+open Org.BouncyCastle.X509
 
 module Crypto =
 
@@ -19,10 +20,38 @@ module Crypto =
     let private createP521Ecdh () =
         ECDiffieHellman.Create(ECCurve.NamedCurves.nistP521)
 
+    let private generateX25519KeyPair () : byte[] * byte[] =
+        let gen = X25519KeyPairGenerator()
+        gen.Init(X25519KeyGenerationParameters(SecureRandom()))
+        let pair = gen.GenerateKeyPair()
+        let privateKey = PrivateKeyInfoFactory.CreatePrivateKeyInfo(pair.Private).GetEncoded()
+        let publicKey = SubjectPublicKeyInfoFactory.CreateSubjectPublicKeyInfo(pair.Public).GetEncoded()
+        (privateKey, publicKey)
+
+    let private publicKeyFromX25519PrivatePkcs8 (privatePkcs8: byte[]) : byte[] =
+        let privateKey = PrivateKeyFactory.CreateKey(privatePkcs8) :?> X25519PrivateKeyParameters
+        let publicKey = privateKey.GeneratePublicKey()
+        SubjectPublicKeyInfoFactory.CreateSubjectPublicKeyInfo(publicKey).GetEncoded()
+
+    let private deriveX25519SharedSecret (privatePkcs8: byte[]) (peerPublicSpki: byte[]) : byte[] =
+        let privateKey = PrivateKeyFactory.CreateKey(privatePkcs8) :?> X25519PrivateKeyParameters
+        let peerPublicKey = PublicKeyFactory.CreateKey(peerPublicSpki) :?> X25519PublicKeyParameters
+        let agreement = X25519Agreement()
+        agreement.Init(privateKey)
+        let raw = Array.zeroCreate<byte> agreement.AgreementSize
+        agreement.CalculateAgreement(peerPublicKey, raw, 0)
+        SHA256.HashData(raw)
+
+    let private encapsulateWithX25519EphemeralPrivate (eskPkcs8: byte[]) (recipientPublicSpki: byte[]) : byte[] * byte[] =
+        let epk = publicKeyFromX25519PrivatePkcs8 eskPkcs8
+        let shared = deriveX25519SharedSecret eskPkcs8 recipientPublicSpki
+        (epk, shared)
+
     let private getKemParameters = function
         | DhKemP256HkdfSha256 -> createP256Ecdh, HashAlgorithmName("SHA256")
         | DhKemP384HkdfSha384 -> createP384Ecdh, HashAlgorithmName("SHA384")
         | DhKemP521HkdfSha512 -> createP521Ecdh, HashAlgorithmName("SHA512")
+        | DhKemX25519HkdfSha256 -> invalidArg "kem" "X25519 uses dedicated key handling path"
         | CustomKem name -> invalidArg "kem" (sprintf "Unsupported KEM %s; provide a custom strategy instead" name)
 
     let private generateKeyPairUsing (createEcdh: unit -> ECDiffieHellman) : byte[] * byte[] =
@@ -52,20 +81,32 @@ module Crypto =
         (epk, shared)
 
     let generateKeyPairForKem kem =
-        let createEcdh, _ = getKemParameters kem
-        generateKeyPairUsing createEcdh
+        match kem with
+        | DhKemX25519HkdfSha256 -> generateX25519KeyPair ()
+        | _ ->
+            let createEcdh, _ = getKemParameters kem
+            generateKeyPairUsing createEcdh
 
     let publicKeyFromPrivatePkcs8ForKem kem privatePkcs8 =
-        let createEcdh, _ = getKemParameters kem
-        publicKeyFromPrivatePkcs8Using createEcdh privatePkcs8
+        match kem with
+        | DhKemX25519HkdfSha256 -> publicKeyFromX25519PrivatePkcs8 privatePkcs8
+        | _ ->
+            let createEcdh, _ = getKemParameters kem
+            publicKeyFromPrivatePkcs8Using createEcdh privatePkcs8
 
     let deriveSharedSecretForKem kem privatePkcs8 peerPublicSpki =
-        let createEcdh, hashAlgorithm = getKemParameters kem
-        deriveSharedSecretUsing createEcdh hashAlgorithm privatePkcs8 peerPublicSpki
+        match kem with
+        | DhKemX25519HkdfSha256 -> deriveX25519SharedSecret privatePkcs8 peerPublicSpki
+        | _ ->
+            let createEcdh, hashAlgorithm = getKemParameters kem
+            deriveSharedSecretUsing createEcdh hashAlgorithm privatePkcs8 peerPublicSpki
 
     let encapsulateWithEphemeralPrivateForKem kem eskPkcs8 recipientPublicSpki =
-        let createEcdh, hashAlgorithm = getKemParameters kem
-        encapsulateWithEphemeralPrivateUsing createEcdh hashAlgorithm eskPkcs8 recipientPublicSpki
+        match kem with
+        | DhKemX25519HkdfSha256 -> encapsulateWithX25519EphemeralPrivate eskPkcs8 recipientPublicSpki
+        | _ ->
+            let createEcdh, hashAlgorithm = getKemParameters kem
+            encapsulateWithEphemeralPrivateUsing createEcdh hashAlgorithm eskPkcs8 recipientPublicSpki
 
     let generateEcdhP256KeyPair () : byte[] * byte[] =
         generateKeyPairUsing createP256Ecdh
@@ -76,6 +117,9 @@ module Crypto =
     let generateEcdhP521KeyPair () : byte[] * byte[] =
         generateKeyPairUsing createP521Ecdh
 
+    let generateEcdhX25519KeyPair () : byte[] * byte[] =
+        generateX25519KeyPair ()
+
     let publicKeyFromPrivatePkcs8 (privatePkcs8: byte[]) : byte[] =
         publicKeyFromPrivatePkcs8Using createP256Ecdh privatePkcs8
 
@@ -85,6 +129,9 @@ module Crypto =
     let publicKeyFromPrivatePkcs8P521 (privatePkcs8: byte[]) : byte[] =
         publicKeyFromPrivatePkcs8Using createP521Ecdh privatePkcs8
 
+    let publicKeyFromPrivatePkcs8X25519 (privatePkcs8: byte[]) : byte[] =
+        publicKeyFromX25519PrivatePkcs8 privatePkcs8
+
     let deriveSharedSecret (privatePkcs8: byte[]) (peerPublicSpki: byte[]) : byte[] =
         deriveSharedSecretUsing createP256Ecdh HashAlgorithmName.SHA256 privatePkcs8 peerPublicSpki
 
@@ -93,6 +140,9 @@ module Crypto =
 
     let deriveSharedSecretP521 (privatePkcs8: byte[]) (peerPublicSpki: byte[]) : byte[] =
         deriveSharedSecretUsing createP521Ecdh HashAlgorithmName.SHA512 privatePkcs8 peerPublicSpki
+
+    let deriveSharedSecretX25519 (privatePkcs8: byte[]) (peerPublicSpki: byte[]) : byte[] =
+        deriveX25519SharedSecret privatePkcs8 peerPublicSpki
 
     /// Encapsulate using a provided ephemeral private key (PKCS#8) and recipient public SPKI.
     /// Returns (epk_spki, shared_secret)
@@ -104,6 +154,9 @@ module Crypto =
 
     let encapsulateWithEphemeralPrivateP521 (eskPkcs8: byte[]) (recipientPublicSpki: byte[]) : byte[] * byte[] =
         encapsulateWithEphemeralPrivateUsing createP521Ecdh HashAlgorithmName.SHA512 eskPkcs8 recipientPublicSpki
+
+    let encapsulateWithEphemeralPrivateX25519 (eskPkcs8: byte[]) (recipientPublicSpki: byte[]) : byte[] * byte[] =
+        encapsulateWithX25519EphemeralPrivate eskPkcs8 recipientPublicSpki
 
     let private hashLength = function
         | h when h = HashAlgorithmName("SHA256") -> 32
