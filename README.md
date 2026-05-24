@@ -11,7 +11,7 @@ This repository provides two NuGet packages:
 
 Current implementation focuses on RFC 9180 style flows for:
 
-- KEM: DHKEM(P-256, HKDF-SHA256), DHKEM(P-384, HKDF-SHA384), DHKEM(P-521, HKDF-SHA512)
+- KEM: DHKEM(P-256, HKDF-SHA256), DHKEM(X25519, HKDF-SHA256), DHKEM(P-384, HKDF-SHA384), DHKEM(P-521, HKDF-SHA512)
 - KDF: HKDF-SHA256, HKDF-SHA384, HKDF-SHA512
 - AEAD: AES-128-GCM, AES-256-GCM
 - Modes: Base, PSK, Auth, AuthPSK

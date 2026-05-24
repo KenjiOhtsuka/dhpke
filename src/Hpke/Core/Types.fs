@@ -10,6 +10,7 @@ type HpkeMode =
 
 type KemAlgorithm =
     | DhKemP256HkdfSha256
+    | DhKemX25519HkdfSha256
     | DhKemP384HkdfSha384
     | DhKemP521HkdfSha512
     | CustomKem of string
@@ -94,6 +95,18 @@ module Suites =
         Aead = Aes256Gcm
     }
 
+    let DefaultX25519Aes128 : HpkeSuite = {
+        Kem = DhKemX25519HkdfSha256
+        Kdf = HkdfSha256
+        Aead = Aes128Gcm
+    }
+
+    let DefaultX25519Aes256 : HpkeSuite = {
+        Kem = DhKemX25519HkdfSha256
+        Kdf = HkdfSha256
+        Aead = Aes256Gcm
+    }
+
     let Default = DefaultAes128
 
     let create kem kdf aead : HpkeSuite = {
@@ -102,10 +115,11 @@ module Suites =
         Aead = aead
     }
 
-    let Supported = [ DefaultAes128; DefaultAes256; DefaultP384Aes128; DefaultP384Aes256; DefaultP521Aes128; DefaultP521Aes256 ]
+    let Supported = [ DefaultAes128; DefaultAes256; DefaultX25519Aes128; DefaultX25519Aes256; DefaultP384Aes128; DefaultP384Aes256; DefaultP521Aes128; DefaultP521Aes256 ]
 
     let isSupportedKem = function
         | DhKemP256HkdfSha256
+        | DhKemX25519HkdfSha256
         | DhKemP384HkdfSha384
         | DhKemP521HkdfSha512 -> true
         | _ -> false
